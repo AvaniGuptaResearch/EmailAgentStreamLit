@@ -266,6 +266,8 @@ RESPONSE REQUIREMENTS:
 6. Use natural, human-like language
 7. Keep professional but personalized
 8. Address any deadlines or urgency
+9. IMPORTANT: Only include the email body content - NO signatures, footers, or contact info
+10. End with a simple closing like 'Best regards,' or 'Thanks,' followed by just the first name
 
 RESPONSE GUIDELINES:
 - For meetings: Accept/decline with calendar check
@@ -276,10 +278,19 @@ RESPONSE GUIDELINES:
 
 Create a complete email response with subject and body.
 
+IMPORTANT: The body should contain ONLY the email message content. Do NOT include:
+- Email signatures
+- Contact information
+- Company logos or footers
+- Full names in signatures
+- Phone numbers or addresses
+
+The institutional email signature will be automatically added by the email system.
+
 Respond in this EXACT JSON format:
 {{
     "subject": "Re: Original Subject",
-    "body": "Complete email body with greeting, content, and closing",
+    "body": "Hi [Name],\n\n[Email content here]\n\nBest regards,\nAvani",
     "tone": "professional/friendly/formal/casual",
     "confidence": 0.9,
     "reasoning": "Why this response approach was chosen",
@@ -321,13 +332,14 @@ Respond in this EXACT JSON format:
         """Fallback draft if LLM fails"""
         
         sender_first_name = email.sender.split()[0] if email.sender else "there"
+        first_name_only = user_name.split()[0] if user_name else "Avani"
         
         if analysis.action_required == "attend":
-            body = f"Hi {sender_first_name},\n\nThank you for the meeting invitation. I'll check my calendar and confirm my attendance shortly.\n\nBest regards,\n{user_name}"
+            body = f"Hi {sender_first_name},\n\nThank you for the meeting invitation. I'll check my calendar and confirm my attendance shortly.\n\nBest regards,\n{first_name_only}"
         elif analysis.action_required == "reply":
-            body = f"Hi {sender_first_name},\n\nThank you for your email. I've received your message and will respond with details shortly.\n\nBest regards,\n{user_name}"
+            body = f"Hi {sender_first_name},\n\nThank you for your email. I've received your message and will respond with details shortly.\n\nBest regards,\n{first_name_only}"
         else:
-            body = f"Hi {sender_first_name},\n\nThank you for your email. I'll review this and get back to you soon.\n\nBest regards,\n{user_name}"
+            body = f"Hi {sender_first_name},\n\nThank you for your email. I'll review this and get back to you soon.\n\nBest regards,\n{first_name_only}"
         
         return LLMDraftResult(
             subject=f"Re: {email.subject}",

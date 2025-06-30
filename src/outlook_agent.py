@@ -324,13 +324,54 @@ class OutlookService:
         clean = clean.replace('&nbsp;', ' ').replace('&lt;', '<').replace('&gt;', '>').replace('&amp;', '&')
         return clean.strip()
     
+    def _clean_email_body(self, body: str) -> str:
+        """Clean email body to prevent signature duplication and formatting issues"""
+        
+        # Remove any existing institutional signatures or contact info patterns
+        import re
+        
+        # Patterns to remove (institutional signature elements)
+        signature_patterns = [
+            r'Client AI Engineer.*?AAbu Dhabi, UAE.*?mbzuai\.ac\.ae',
+            r'Research Office.*?P \+971.*?www\.mbzuai\.ac\.ae',
+            r'<MBZUAI_Logo_EN_Black\.png>.*?<https://www\.youtube\.com.*?>',
+            r'Avani Gupta\s*Client AI Engineer.*?(?=\n\n|\n$|$)',
+            r'P \+971 2 811 3417.*?W www\.mbzuai\.ac\.ae',
+            r'<https://www\.instagram\.com/mbzuai>.*?<https://www\.youtube\.com.*?>'
+        ]
+        
+        cleaned_body = body
+        for pattern in signature_patterns:
+            cleaned_body = re.sub(pattern, '', cleaned_body, flags=re.DOTALL | re.IGNORECASE)
+        
+        # Clean up extra whitespace and newlines
+        cleaned_body = re.sub(r'\n{3,}', '\n\n', cleaned_body)
+        cleaned_body = cleaned_body.strip()
+        
+        # Ensure proper email structure (greeting + content + simple closing)
+        lines = cleaned_body.split('\n')
+        
+        # If body already ends with institutional signature info, remove it
+        while lines and any(keyword in lines[-1].lower() for keyword in 
+                          ['client ai engineer', 'research office', 'mbzuai', '+971', 'abu dhabi']):
+            lines.pop()
+        
+        # Rebuild clean body
+        clean_content = '\n'.join(lines).strip()
+        
+        return clean_content
+    
     def create_draft(self, to_email: str, subject: str, body: str) -> Dict:
-        """Create draft email in Outlook via Graph API"""
+        """Create draft email in Outlook via Graph API with proper formatting"""
+        
+        # Clean the body content and ensure it doesn't include duplicate signatures
+        clean_body = self._clean_email_body(body)
+        
         draft_data = {
             "subject": subject,
             "body": {
                 "contentType": "Text",
-                "content": body
+                "content": clean_body
             },
             "toRecipients": [
                 {
