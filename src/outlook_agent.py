@@ -191,22 +191,144 @@ class OutlookService:
             error_msg = result.get('error_description', result.get('error', 'Unknown error'))
             raise Exception(f"Service authentication failed: {error_msg}")
     
-    def authenticate(self):
-        """Smart authentication - try interactive first, fallback to credentials"""
-        try:
-            # Always use interactive for /me endpoints
-            self.authenticate_interactive()
-        except Exception as e:
-            print(f"⚠️ Interactive auth failed: {e}")
-            if self.client_secret:
-                print("🔄 Trying service account authentication...")
+    def authenticate_web_oauth(self):
+        """Web-based OAuth for serverless environments like Hugging Face Spaces"""
+        import streamlit as st
+        import urllib.parse
+        import secrets
+        import base64
+        import hashlib
+        
+        # Initialize session state for OAuth
+        if 'oauth_state' not in st.session_state:
+            st.session_state.oauth_state = None
+        if 'access_token' not in st.session_state:
+            st.session_state.access_token = None
+        
+        # Check if we already have a token
+        if st.session_state.access_token:
+            self.access_token = st.session_state.access_token
+            print("✅ Using cached OAuth token")
+            return
+        
+        # Check for authorization code in URL parameters
+        query_params = st.query_params
+        
+        if 'code' in query_params and 'state' in query_params:
+            # We got the authorization code back from Microsoft
+            auth_code = query_params['code']
+            state = query_params['state']
+            
+            if state == st.session_state.oauth_state:
                 try:
-                    self.authenticate_client_credentials()
-                    print("⚠️ Using service account - some features may be limited")
-                except Exception as e2:
-                    raise Exception(f"All authentication methods failed. Interactive: {e}, Service: {e2}")
+                    # Exchange authorization code for access token
+                    self.access_token = self._exchange_code_for_token(auth_code)
+                    st.session_state.access_token = self.access_token
+                    print("✅ OAuth authentication successful!")
+                    st.success("✅ Successfully authenticated with Microsoft!")
+                    st.rerun()
+                    return
+                except Exception as e:
+                    st.error(f"❌ Failed to exchange authorization code: {e}")
+                    return
             else:
-                raise e
+                st.error("❌ Invalid OAuth state parameter")
+                return
+        
+        # Generate OAuth authorization URL
+        st.session_state.oauth_state = secrets.token_urlsafe(32)
+        
+        # Create authorization URL
+        auth_url = self._generate_auth_url(st.session_state.oauth_state)
+        
+        st.warning("🔐 Authentication Required")
+        st.markdown("""
+        To access your Outlook emails, you need to authenticate with Microsoft.
+        
+        **Steps:**
+        1. Click the button below to open Microsoft login
+        2. Sign in with your Microsoft account
+        3. Grant permissions to the app
+        4. You'll be redirected back here automatically
+        """)
+        
+        if st.button("🔐 Authenticate with Microsoft", type="primary"):
+            st.markdown(f'<meta http-equiv="refresh" content="0; url={auth_url}">', unsafe_allow_html=True)
+            st.markdown(f"If not redirected automatically, [click here]({auth_url})")
+        
+        # Show manual option
+        with st.expander("Manual Authentication (if button doesn't work)"):
+            st.code(auth_url)
+            st.markdown("Copy this URL and open it in your browser")
+    
+    def _generate_auth_url(self, state: str) -> str:
+        """Generate Microsoft OAuth authorization URL"""
+        import urllib.parse
+        
+        # Get the current Streamlit app URL for redirect
+        # In Hugging Face Spaces, this will be the space URL
+        redirect_uri = "https://huggingface.co/spaces/your-username/your-space-name"  # You'll need to update this
+        
+        params = {
+            'client_id': self.client_id,
+            'response_type': 'code',
+            'redirect_uri': redirect_uri,
+            'scope': ' '.join(SCOPES),
+            'state': state,
+            'response_mode': 'query'
+        }
+        
+        auth_url = f"https://login.microsoftonline.com/{self.tenant_id}/oauth2/v2.0/authorize"
+        return f"{auth_url}?{urllib.parse.urlencode(params)}"
+    
+    def _exchange_code_for_token(self, auth_code: str) -> str:
+        """Exchange authorization code for access token"""
+        import requests
+        
+        redirect_uri = "https://huggingface.co/spaces/your-username/your-space-name"  # You'll need to update this
+        
+        token_data = {
+            'client_id': self.client_id,
+            'scope': ' '.join(SCOPES),
+            'code': auth_code,
+            'redirect_uri': redirect_uri,
+            'grant_type': 'authorization_code'
+        }
+        
+        token_url = f"https://login.microsoftonline.com/{self.tenant_id}/oauth2/v2.0/token"
+        
+        response = requests.post(token_url, data=token_data)
+        
+        if response.status_code == 200:
+            token_response = response.json()
+            return token_response['access_token']
+        else:
+            raise Exception(f"Token exchange failed: {response.text}")
+    
+    def authenticate(self):
+        """Smart authentication - detect environment and use appropriate method"""
+        # Check if running in serverless environment (like Hugging Face Spaces)
+        import os
+        is_serverless = os.getenv('SPACE_ID') or os.getenv('HF_SPACE_ID') or os.getenv('STREAMLIT_SHARING')
+        
+        if is_serverless:
+            print("🌐 Detected serverless environment - using web-based OAuth")
+            return self.authenticate_web_oauth()
+        else:
+            try:
+                # Local environment - use interactive auth
+                self.authenticate_interactive()
+            except Exception as e:
+                print(f"⚠️ Interactive auth failed: {e}")
+                if self.client_secret:
+                    print("🔄 Trying service account authentication...")
+                    try:
+                        self.authenticate_client_credentials()
+                        print("⚠️ Using service account - some features may be limited")
+                    except Exception as e2:
+                        raise Exception(f"All authentication methods failed. Interactive: {e}, Service: {e2}")
+                else:
+                    raise e
     
     def _make_graph_request(self, endpoint: str, method: str = "GET", data: Dict = None) -> Dict:
         """Make authenticated request to Microsoft Graph"""
@@ -325,53 +447,55 @@ class OutlookService:
         return clean.strip()
     
     def _clean_email_body(self, body: str) -> str:
-        """Clean email body to prevent signature duplication and formatting issues"""
+        """Clean email body to prevent signature duplication - MINIMAL cleaning only"""
         
-        # Remove any existing institutional signatures or contact info patterns
         import re
         
-        # Patterns to remove (institutional signature elements)
+        # Only remove obvious signature blocks that interfere with draft creation
+        # Don't be too aggressive since this breaks LLM-generated content
         signature_patterns = [
-            r'Client AI Engineer.*?AAbu Dhabi, UAE.*?mbzuai\.ac\.ae',
-            r'Research Office.*?P \+971.*?www\.mbzuai\.ac\.ae',
-            r'<MBZUAI_Logo_EN_Black\.png>.*?<https://www\.youtube\.com.*?>',
-            r'Avani Gupta\s*Client AI Engineer.*?(?=\n\n|\n$|$)',
-            r'P \+971 2 811 3417.*?W www\.mbzuai\.ac\.ae',
-            r'<https://www\.instagram\.com/mbzuai>.*?<https://www\.youtube\.com.*?>'
+            # Only remove the specific problematic signature format
+            r'Avani Gupta\s*Client AI Engineer\s*Research Office.*?<https://www\.youtube\.com.*?>',
         ]
         
-        cleaned_body = body
+        cleaned_body = body.strip()
+        
+        # Apply minimal pattern removal
         for pattern in signature_patterns:
             cleaned_body = re.sub(pattern, '', cleaned_body, flags=re.DOTALL | re.IGNORECASE)
         
-        # Clean up extra whitespace and newlines
+        # Clean up excessive whitespace only
         cleaned_body = re.sub(r'\n{3,}', '\n\n', cleaned_body)
-        cleaned_body = cleaned_body.strip()
         
-        # Ensure proper email structure (greeting + content + simple closing)
-        lines = cleaned_body.split('\n')
+        return cleaned_body.strip()
+    
+    def _format_body_for_outlook(self, body: str) -> str:
+        """Format email body as proper HTML to ensure Outlook signature placement"""
         
-        # If body already ends with institutional signature info, remove it
-        while lines and any(keyword in lines[-1].lower() for keyword in 
-                          ['client ai engineer', 'research office', 'mbzuai', '+971', 'abu dhabi']):
-            lines.pop()
+        # Convert plain text to HTML with proper structure
+        # This ensures Outlook can properly append the signature at the bottom
+        html_body = body.replace('\n', '<br>\n')
         
-        # Rebuild clean body
-        clean_content = '\n'.join(lines).strip()
+        # Wrap in proper HTML structure that Outlook expects
+        formatted_html = f"""<div style="font-family: Calibri, Arial, sans-serif; font-size: 11pt;">
+{html_body}
+</div>"""
         
-        return clean_content
+        return formatted_html
     
     def create_draft(self, to_email: str, subject: str, body: str) -> Dict:
         """Create draft email in Outlook via Graph API with proper formatting"""
         
-        # Clean the body content and ensure it doesn't include duplicate signatures
+        # Clean the body content to remove any signature elements that might interfere
         clean_body = self._clean_email_body(body)
         
+        # Use HTML content type to ensure proper signature placement
+        # This helps Outlook maintain proper email structure
         draft_data = {
             "subject": subject,
             "body": {
-                "contentType": "Text",
-                "content": clean_body
+                "contentType": "HTML",
+                "content": self._format_body_for_outlook(clean_body)
             },
             "toRecipients": [
                 {

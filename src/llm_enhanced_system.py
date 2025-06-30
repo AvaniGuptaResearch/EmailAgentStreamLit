@@ -266,8 +266,6 @@ RESPONSE REQUIREMENTS:
 6. Use natural, human-like language
 7. Keep professional but personalized
 8. Address any deadlines or urgency
-9. IMPORTANT: Only include the email body content - NO signatures, footers, or contact info
-10. End with a simple closing like 'Best regards,' or 'Thanks,' followed by just the first name
 
 RESPONSE GUIDELINES:
 - For meetings: Accept/decline with calendar check
@@ -278,19 +276,10 @@ RESPONSE GUIDELINES:
 
 Create a complete email response with subject and body.
 
-IMPORTANT: The body should contain ONLY the email message content. Do NOT include:
-- Email signatures
-- Contact information
-- Company logos or footers
-- Full names in signatures
-- Phone numbers or addresses
-
-The institutional email signature will be automatically added by the email system.
-
 Respond in this EXACT JSON format:
 {{
     "subject": "Re: Original Subject",
-    "body": "Hi [Name],\n\n[Email content here]\n\nBest regards,\nAvani",
+    "body": "Complete email body with greeting, content, and closing",
     "tone": "professional/friendly/formal/casual",
     "confidence": 0.9,
     "reasoning": "Why this response approach was chosen",
