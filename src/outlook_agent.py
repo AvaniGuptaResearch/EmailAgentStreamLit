@@ -238,10 +238,26 @@ class OutlookService:
         # Generate OAuth authorization URL
         st.session_state.oauth_state = secrets.token_urlsafe(32)
         
+        # Get and display redirect URI info
+        redirect_uri = self._get_redirect_uri()
+        
         # Create authorization URL
         auth_url = self._generate_auth_url(st.session_state.oauth_state)
         
         st.warning("🔐 Authentication Required")
+        
+        # Show redirect URI configuration info
+        with st.expander("⚙️ Configuration Info", expanded=False):
+            st.info(f"**Redirect URI:** `{redirect_uri}`")
+            st.markdown("""
+            **Important:** Make sure this redirect URI is added to your Azure AD app registration:
+            1. Go to [Azure Portal](https://portal.azure.com)
+            2. Navigate to "Azure Active Directory" → "App registrations" → Your app
+            3. Go to "Authentication" section
+            4. Add the redirect URI shown above
+            5. Set platform type to "Web"
+            """)
+        
         st.markdown("""
         To access your Outlook emails, you need to authenticate with Microsoft.
         
@@ -264,10 +280,11 @@ class OutlookService:
     def _generate_auth_url(self, state: str) -> str:
         """Generate Microsoft OAuth authorization URL"""
         import urllib.parse
+        import streamlit as st
+        import os
         
-        # Get the current Streamlit app URL for redirect
-        # In Hugging Face Spaces, this will be the space URL
-        redirect_uri = "https://huggingface.co/spaces/your-username/your-space-name"  # You'll need to update this
+        # Auto-detect redirect URI based on environment
+        redirect_uri = self._get_redirect_uri()
         
         params = {
             'client_id': self.client_id,
@@ -281,11 +298,34 @@ class OutlookService:
         auth_url = f"https://login.microsoftonline.com/{self.tenant_id}/oauth2/v2.0/authorize"
         return f"{auth_url}?{urllib.parse.urlencode(params)}"
     
+    def _get_redirect_uri(self) -> str:
+        """Auto-detect or configure redirect URI based on environment"""
+        import streamlit as st
+        import os
+        
+        # Check for environment variable first (most reliable)
+        if os.getenv('REDIRECT_URI'):
+            return os.getenv('REDIRECT_URI')
+        
+        # Try to auto-detect from Hugging Face environment
+        space_id = os.getenv('SPACE_ID') or os.getenv('HF_SPACE_ID')
+        if space_id:
+            # Extract username and space name from space_id (format: username/space-name)
+            if '/' in space_id:
+                return f"https://{space_id.replace('/', '-')}.hf.space"
+            else:
+                # Fallback - user needs to configure manually
+                st.error(f"❌ Cannot auto-detect redirect URI. Please set REDIRECT_URI environment variable to your Hugging Face Space URL")
+                return "https://your-space-url.hf.space"
+        
+        # Local development fallback
+        return "http://localhost:8501"
+    
     def _exchange_code_for_token(self, auth_code: str) -> str:
         """Exchange authorization code for access token"""
         import requests
         
-        redirect_uri = "https://huggingface.co/spaces/your-username/your-space-name"  # You'll need to update this
+        redirect_uri = self._get_redirect_uri()
         
         token_data = {
             'client_id': self.client_id,
