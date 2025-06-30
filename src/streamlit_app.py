@@ -11,7 +11,6 @@ Just shows the CLI output directly - no fancy parsing
 import sys
 import os
 from datetime import datetime
-import io
 from contextlib import redirect_stdout
 from dotenv import load_dotenv
 
@@ -58,64 +57,75 @@ def initialize_system():
         return False
 
 def process_emails():
-    """Process emails and show output"""
+    """Process emails and show real-time output"""
     if not st.session_state.llm_system:
         st.error("Initialize first")
         return
     
     # Create containers for live output
     status_placeholder = st.empty()
-    output_placeholder = st.empty()
+    output_container = st.container()
     
     try:
         status_placeholder.info("🤖 Processing emails...")
         
-        # Capture ALL output
-        output_buffer = io.StringIO()
+        # Show output in real-time using st.write_stream simulation
+        with output_container:
+            st.subheader("📧 Live Email Processing")
+            output_placeholder = st.empty()
+            
+            # Capture output with periodic updates
+            
+            class StreamingBuffer:
+                def __init__(self, placeholder):
+                    self.placeholder = placeholder
+                    self.content = ""
+                
+                def write(self, text):
+                    self.content += text
+                    # Update display in real-time
+                    self.placeholder.text(self.content)
+                    return len(text)
+                
+                def flush(self):
+                    pass
+            
+            streaming_buffer = StreamingBuffer(output_placeholder)
+            
+            with redirect_stdout(streaming_buffer):
+                st.session_state.llm_system.process_emails_with_llm(max_emails=10, priority_threshold=60.0)
+            
+            st.session_state.output = streaming_buffer.content
         
-        with redirect_stdout(output_buffer):
-            st.session_state.llm_system.process_emails_with_llm(max_emails=10, priority_threshold=60.0)
-        
-        # Get the complete output
-        complete_output = output_buffer.getvalue()
-        st.session_state.output = complete_output
-        
-        # Clear status and show results
-        status_placeholder.empty()
-        
-        # Show the COMPLETE CLI output
-        st.success("✅ Processing complete!")
-        st.subheader("📧 Email Analysis & Priority Results")
-        st.text(complete_output)  # Show ALL the CLI output as-is
+        # Clear status
+        status_placeholder.success("✅ Processing complete!")
         
     except Exception as e:
         status_placeholder.error(f"❌ Error: {str(e)}")
 
 def main():
-    st.title("📧 Email Agent - CLI Output")
+    st.title("📧 Email Agent - Live Processing")
     
-    col1, col2 = st.columns([1, 4])
+    # Single column layout to fix the dual-text issue
+    st.subheader("Controls")
+    
+    col1, col2 = st.columns([1, 1])
     
     with col1:
-        st.subheader("Controls")
-        
-        if st.button("🚀 Initialize"):
+        if st.button("🚀 Initialize System"):
             initialize_system()
-        
+    
+    with col2:
         if st.session_state.llm_system:
-            st.success("✅ Ready")
-            
+            st.success("✅ System Ready")
             if st.button("🤖 Process Emails"):
                 process_emails()
         else:
-            st.warning("⚠️ Not ready")
+            st.warning("⚠️ Initialize system first")
     
-    with col2:
-        if st.session_state.output:
-            st.subheader("📝 Complete Results")
-            st.text(st.session_state.output)
-        else:
-            st.info("Click 'Process Emails' to see your priority-sorted emails here")
+    # Output section (no duplicate display)
+    if not st.session_state.output:
+        st.info("💡 Click 'Process Emails' to start email analysis")
 
 if __name__ == "__main__":
     main()
