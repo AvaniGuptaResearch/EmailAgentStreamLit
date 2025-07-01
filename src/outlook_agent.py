@@ -78,6 +78,7 @@ class OutlookEmailData:
     action_required: str = "none"  # none, reply, attend, review, approve, complete
     event_key: Optional[str] = None  # For duplicate detection
     is_duplicate: bool = False
+    conversation_id: Optional[str] = None  # For email threading
 
     def __post_init__(self):
         if self.context_tags is None:
@@ -409,16 +410,29 @@ class OutlookService:
             return {'email': '', 'name': '', 'id': ''}
     
     def get_recent_emails(self, max_results: int = 20, hours_back: int = 24) -> List[OutlookEmailData]:
-        """Fetch recent emails from Outlook"""
+        """Fetch recent emails from Outlook inbox (excluding sent emails)"""
         # Calculate time filter
         after_date = datetime.now() - timedelta(hours=hours_back)
         after_timestamp = after_date.strftime('%Y-%m-%dT%H:%M:%S.000Z')
         
-        # Build query with filters
-        filter_query = f"receivedDateTime ge {after_timestamp}"
-        select_fields = "id,subject,sender,toRecipients,body,bodyPreview,receivedDateTime,importance,isRead,hasAttachments,categories"
+        # Get current user email to filter out sent emails
+        try:
+            user_info = self.get_user_info()
+            current_user_email = user_info.get('email', '')
+            print(f"🔍 DEBUG: Current user email: {current_user_email}")
+        except:
+            current_user_email = ''
         
-        endpoint = f"/me/messages?$filter={filter_query}&$select={select_fields}&$top={max_results}&$orderby=receivedDateTime desc"
+        # Build query with filters - exclude emails sent by current user
+        filter_query = f"receivedDateTime ge {after_timestamp}"
+        if current_user_email:
+            filter_query += f" and sender/emailAddress/address ne '{current_user_email}'"
+        
+        select_fields = "id,subject,sender,toRecipients,body,bodyPreview,receivedDateTime,importance,isRead,hasAttachments,categories,conversationId"
+        
+        endpoint = f"/me/mailFolders/inbox/messages?$filter={filter_query}&$select={select_fields}&$top={max_results}&$orderby=receivedDateTime desc"
+        
+        print(f"🔍 DEBUG: API endpoint: {endpoint[:100]}...")
         
         try:
             result = self._make_graph_request(endpoint)
@@ -437,14 +451,29 @@ class OutlookService:
     def _parse_outlook_email(self, message: Dict) -> Optional[OutlookEmailData]:
         """Parse Outlook email from Graph API response"""
         try:
-            # Extract sender info
-            sender_info = message.get('sender', {}).get('emailAddress', {})
-            sender_name = sender_info.get('name', '')
-            sender_email = sender_info.get('address', '')
+            # Debug: Print raw message structure
+            print(f"🔍 DEBUG: Parsing email - ID: {message.get('id', 'unknown')[:10]}...")
+            print(f"🔍 DEBUG: Available fields: {list(message.keys())}")
+            
+            # Extract sender info - handle missing sender field
+            sender_data = message.get('sender')
+            if sender_data and 'emailAddress' in sender_data:
+                sender_info = sender_data.get('emailAddress', {})
+                sender_name = sender_info.get('name', '')
+                sender_email = sender_info.get('address', '')
+            else:
+                # Handle emails without sender (drafts, sent items, etc.)
+                print(f"⚠️ DEBUG: Email missing sender field - skipping")
+                return None
+            
+            print(f"🔍 DEBUG: Sender info - Name: '{sender_name}', Email: '{sender_email}'")
             
             # Extract recipient info
             recipients = message.get('toRecipients', [])
             recipient_emails = [r.get('emailAddress', {}).get('address', '') for r in recipients]
+            recipient_names = [r.get('emailAddress', {}).get('name', '') for r in recipients]
+            
+            print(f"🔍 DEBUG: Recipients - Emails: {recipient_emails}, Names: {recipient_names}")
             
             # Extract body content
             body_content = message.get('body', {})
@@ -459,7 +488,8 @@ class OutlookService:
                 message.get('receivedDateTime', '').replace('Z', '+00:00')
             )
             
-            return OutlookEmailData(
+            # Create email data object with conversation ID for threading
+            email_data = OutlookEmailData(
                 id=message.get('id', ''),
                 subject=message.get('subject', ''),
                 sender=sender_name,
@@ -473,6 +503,14 @@ class OutlookService:
                 has_attachments=message.get('hasAttachments', False),
                 categories=message.get('categories', [])
             )
+            
+            # Add conversation ID for threading (if available)
+            conversation_id = message.get('conversationId')
+            if conversation_id:
+                email_data.conversation_id = conversation_id
+                
+            print(f"✅ DEBUG: Successfully parsed email from '{sender_name}' <{sender_email}>")
+            return email_data
         except Exception as e:
             print(f"Error parsing email: {e}")
             return None
@@ -487,25 +525,34 @@ class OutlookService:
         return clean.strip()
     
     def _clean_email_body(self, body: str) -> str:
-        """Clean email body to prevent signature duplication - MINIMAL cleaning only"""
+        """Clean email body to prevent signature duplication and formatting issues"""
         
         import re
         
-        # Only remove obvious signature blocks that interfere with draft creation
-        # Don't be too aggressive since this breaks LLM-generated content
+        # Remove duplicate signature blocks that appear in LLM-generated content
         signature_patterns = [
-            # Only remove the specific problematic signature format
-            r'Avani Gupta\s*Client AI Engineer\s*Research Office.*?<https://www\.youtube\.com.*?>',
+            # Remove duplicate "Best regards, Avani Gupta" blocks
+            r'Best regards,\s*Avani Gupta\s*Client AI Engineer.*?Mohammed Bin Zayed University of Artificial Intelligence',
+            r'Best regards,\s*Avani\s*Best regards,\s*Avani Gupta',
+            # Remove institutional signature if it appears in the content
+            r'Avani Gupta\s*Client AI Engineer\s*Research Office.*?Mohammed Bin Zayed University of Artificial Intelligence',
+            # Remove standalone signature blocks
+            r'Client AI Engineer\s*Research Office\s*P \+971.*?Mohammed Bin Zayed University of Artificial Intelligence'
         ]
         
         cleaned_body = body.strip()
         
-        # Apply minimal pattern removal
+        # Apply signature removal patterns
         for pattern in signature_patterns:
             cleaned_body = re.sub(pattern, '', cleaned_body, flags=re.DOTALL | re.IGNORECASE)
         
-        # Clean up excessive whitespace only
+        # Clean up multiple consecutive "Best regards" blocks
+        cleaned_body = re.sub(r'(Best regards,\s*Avani\s*){2,}', 'Best regards,\nAvani', cleaned_body, flags=re.IGNORECASE)
+        cleaned_body = re.sub(r'(Best regards,\s*){2,}', 'Best regards,\n', cleaned_body, flags=re.IGNORECASE)
+        
+        # Clean up excessive whitespace
         cleaned_body = re.sub(r'\n{3,}', '\n\n', cleaned_body)
+        cleaned_body = re.sub(r'[ \t]+\n', '\n', cleaned_body)
         
         return cleaned_body.strip()
     
@@ -523,11 +570,134 @@ class OutlookService:
         
         return formatted_html
     
-    def create_draft(self, to_email: str, subject: str, body: str) -> Dict:
+    def _format_reply_body_with_signature(self, reply_body: str) -> str:
+        """Format reply body with professional signature - FOR CREATEREPLY API"""
+        
+        # Clean the reply body more aggressively since it already has LLM signature
+        import re
+        
+        # Remove any existing signatures from LLM-generated content
+        clean_body = reply_body
+        
+        # Remove LLM-generated signatures
+        signature_patterns = [
+            r'Best regards,\s*Avani.*?Mohammed Bin Zayed University of Artificial Intelligence',
+            r'Best regards,\s*Avani Gupta.*?Research Office.*?UAE',
+            r'Best regards,\s*Avani\s*$'
+        ]
+        
+        for pattern in signature_patterns:
+            clean_body = re.sub(pattern, '', clean_body, flags=re.DOTALL | re.IGNORECASE)
+        
+        # Clean up extra whitespace
+        clean_body = clean_body.strip()
+        
+        # Convert to HTML - let Outlook add the signature automatically
+        # For createReply API, we should let Outlook handle the signature
+        html_reply = clean_body.replace('\n', '<br>\n')
+        
+        formatted_html = f"""<div style="font-family: Calibri, Arial, sans-serif; font-size: 11pt;">
+{html_reply}
+</div>"""
+        
+        return formatted_html
+    
+    def _format_email_body_with_thread(self, reply_body: str, original_email: 'OutlookEmailData') -> str:
+        """Format email body with proper threading and original message context"""
+        
+        # Convert reply to HTML
+        html_reply = reply_body.replace('\n', '<br>\n')
+        
+        # Format the original message date properly
+        try:
+            if hasattr(original_email, 'date') and original_email.date:
+                original_date = original_email.date.strftime("%A, %B %d, %Y %I:%M %p")
+            else:
+                original_date = "Date not available"
+        except:
+            original_date = "Date not available"
+        
+        # Get clean original message content
+        if hasattr(original_email, 'body') and original_email.body:
+            original_body = self._clean_html(original_email.body)
+        elif hasattr(original_email, 'body_preview') and original_email.body_preview:
+            original_body = original_email.body_preview
+        else:
+            original_body = "Original message content not available"
+        
+        # Get recipient info (who the original email was sent to)
+        recipient = getattr(original_email, 'recipient', 'me')
+        
+        # Remove any "Best regards, Avani" from LLM content since we'll add full signature
+        import re
+        
+        # More comprehensive signature removal
+        clean_html_reply = html_reply
+        
+        # Remove various signature patterns
+        signature_remove_patterns = [
+            r'Best regards,\s*Avani\s*$',
+            r'Best regards,\s*Avani\s*\n*$',
+            r'Best regards,\s*\n*Avani\s*$',
+            r'Best regards,\s*\n*Avani\s*\n*$'
+        ]
+        
+        for pattern in signature_remove_patterns:
+            clean_html_reply = re.sub(pattern, '', clean_html_reply, flags=re.IGNORECASE | re.MULTILINE)
+        
+        clean_html_reply = clean_html_reply.strip()
+        
+        print(f"🔍 DEBUG: Original HTML reply length: {len(html_reply)}")
+        print(f"🔍 DEBUG: Cleaned HTML reply length: {len(clean_html_reply)}")
+        print(f"🔍 DEBUG: Cleaned content preview: {clean_html_reply[-100:] if len(clean_html_reply) > 100 else clean_html_reply}")
+        
+        # Create proper email reply format with original message quoted
+        formatted_html = f"""<div style="font-family: Calibri, Arial, sans-serif; font-size: 11pt; color: #000000;">
+{clean_html_reply}
+
+<br><br>
+<div style="color: #000000;">
+<strong>Best regards,</strong><br><br>
+<strong>Avani Gupta</strong><br>
+Client AI Engineer<br>
+Research Office<br>
+P +971 2 811 3417 &nbsp;&nbsp;W <a href="https://www.mbzuai.ac.ae" style="color: #000000;">www.mbzuai.ac.ae</a><br>
+Abu Dhabi, UAE<br>
+<br>
+<!-- MBZUAI Logo -->
+<div style="margin-top: 10px; font-size: 9pt; color: #666666;">
+<em>Mohammed Bin Zayed University of Artificial Intelligence</em>
+</div>
+</div>
+
+<hr style="border: none; border-top: 1px solid #cccccc; margin: 20px 0;">
+
+<div style="color: #666666; font-size: 10pt;">
+<strong>From:</strong> {original_email.sender} &lt;{original_email.sender_email}&gt;<br>
+<strong>Sent:</strong> {original_date}<br>
+<strong>To:</strong> {recipient}<br>
+<strong>Subject:</strong> {original_email.subject}<br>
+<br>
+{original_body.replace(chr(10), '<br>').replace(chr(13), '')}
+</div>
+</div>"""
+        
+        return formatted_html
+    
+    def create_draft(self, to_email: str, subject: str, body: str, to_name: str = None) -> Dict:
         """Create draft email in Outlook via Graph API with proper formatting"""
         
         # Clean the body content to remove any signature elements that might interfere
         clean_body = self._clean_email_body(body)
+        
+        # Get user info for From field
+        try:
+            user_info = self.get_user_info()
+            from_name = user_info.get('name', 'Avani Gupta')
+            from_email = user_info.get('email', '')
+        except:
+            from_name = 'Avani Gupta'
+            from_email = ''
         
         # Use HTML content type to ensure proper signature placement
         # This helps Outlook maintain proper email structure
@@ -540,18 +710,113 @@ class OutlookService:
             "toRecipients": [
                 {
                     "emailAddress": {
-                        "address": to_email
+                        "address": to_email,
+                        "name": to_name if to_name else to_email.split('@')[0]
                     }
                 }
             ]
+            # Note: Microsoft Graph API automatically sets the From field to the authenticated user
+            # The 'from' field is usually not needed in draft creation and may cause errors
         }
         
         try:
+            # Debug: Print draft data being sent
+            print(f"🔍 Creating draft with To: {draft_data['toRecipients'][0]['emailAddress']['name']} <{draft_data['toRecipients'][0]['emailAddress']['address']}>")
+            
             response = self._make_graph_request("/me/messages", method="POST", data=draft_data)
             print(f"✅ Draft created successfully: {subject}")
             return {"success": True, "draft_id": response.get("id"), "subject": subject}
         except Exception as e:
             print(f"❌ Error creating draft: {e}")
+            return {"success": False, "error": str(e)}
+    
+    def create_draft_reply(self, original_email: 'OutlookEmailData', reply_body: str) -> Dict:
+        """Create a proper reply draft with threading and original message context"""
+        # Always use manual draft creation to ensure we get the full email thread
+        # The createReply API doesn't include the original message content
+        print(f"📧 Creating manual reply draft with full email thread...")
+        return self._create_manual_draft_reply(original_email, reply_body)
+    
+    def _create_reply_draft_via_api(self, original_email: 'OutlookEmailData', reply_body: str) -> Dict:
+        """Use Microsoft Graph's createReply endpoint for proper threading"""
+        
+        # Clean and format the reply body
+        clean_body = self._clean_email_body(reply_body)
+        formatted_body = self._format_reply_body_with_signature(clean_body)
+        
+        reply_data = {
+            "message": {
+                "body": {
+                    "contentType": "HTML",
+                    "content": formatted_body
+                }
+            }
+        }
+        
+        try:
+            # Use the createReply endpoint which maintains threading automatically
+            endpoint = f"/me/messages/{original_email.id}/createReply"
+            response = self._make_graph_request(endpoint, method="POST", data=reply_data)
+            
+            print(f"✅ Reply draft created successfully: Re: {original_email.subject}")
+            return {"success": True, "draft_id": response.get("id"), "subject": f"Re: {original_email.subject}"}
+            
+        except Exception as e:
+            raise Exception(f"CreateReply API failed: {e}")
+    
+    def _create_manual_draft_reply(self, original_email: 'OutlookEmailData', reply_body: str) -> Dict:
+        """Manually create reply draft with threading context"""
+        
+        # Format subject for reply
+        subject = original_email.subject
+        if not subject.startswith("Re:"):
+            subject = f"Re: {subject}"
+        
+        # Format body with original message threading
+        formatted_body = self._format_email_body_with_thread(reply_body, original_email)
+        
+        # Get user info for From field
+        try:
+            user_info = self.get_user_info()
+            from_name = user_info.get('name', 'Avani Gupta')
+            from_email = user_info.get('email', '')
+        except:
+            from_name = 'Avani Gupta'
+            from_email = ''
+        
+        draft_message = {
+            "subject": subject,
+            "body": {
+                "contentType": "HTML",
+                "content": formatted_body
+            },
+            "toRecipients": [{
+                "emailAddress": {
+                    "address": original_email.sender_email,
+                    "name": original_email.sender if original_email.sender else original_email.sender_email.split('@')[0]
+                }
+            }],
+            "from": {
+                "emailAddress": {
+                    "address": from_email,
+                    "name": from_name
+                }
+            }
+        }
+        
+        # Add conversation ID if available for threading
+        if hasattr(original_email, 'conversation_id') and original_email.conversation_id:
+            draft_message["conversationId"] = original_email.conversation_id
+        
+        try:
+            # Debug: Print draft data being sent
+            print(f"🔍 Creating manual reply with To: {draft_message['toRecipients'][0]['emailAddress']['name']} <{draft_message['toRecipients'][0]['emailAddress']['address']}>")
+            
+            response = self._make_graph_request("/me/messages", method="POST", data=draft_message)
+            print(f"✅ Manual reply draft created: {subject}")
+            return {"success": True, "draft_id": response.get("id"), "subject": subject}
+        except Exception as e:
+            print(f"❌ Error creating manual reply draft: {e}")
             return {"success": False, "error": str(e)}
     
     def send_email(self, to_email: str, subject: str, body: str) -> bool:

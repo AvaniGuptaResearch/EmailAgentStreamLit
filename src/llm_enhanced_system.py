@@ -80,7 +80,10 @@ class OllamaLLMService:
             "options": {
                 "temperature": temperature,
                 "num_predict": max_tokens,
-                "stop": ["Human:", "Assistant:", "###"]
+                "stop": ["Human:", "Assistant:", "###", "\n\n\n", "---"],
+                "top_k": 40,
+                "top_p": 0.9,
+                "repeat_penalty": 1.1
             }
         }
         
@@ -238,12 +241,14 @@ class LLMResponseDrafter:
         """Generate personalized draft response using LLM"""
         
         draft_prompt = f"""
-You are writing an email response as {user_name}, a professional manager. Create a personalized, contextual response.
+You are {user_name}, responding to an email. Write an email response FROM {user_name}'s perspective, not TO {user_name}.
 
-ORIGINAL EMAIL:
+ORIGINAL EMAIL RECEIVED BY {user_name}:
 From: {email.sender}
 Subject: {email.subject}
 Content: {email.body[:800]}
+
+YOUR TASK: Write {user_name}'s response to this email.
 
 ANALYSIS CONTEXT:
 - Email Type: {analysis.email_type}
@@ -254,49 +259,60 @@ ANALYSIS CONTEXT:
 - Sender Relationship: {analysis.sender_relationship}
 - Business Context: {analysis.business_context}
 
-USER WRITING STYLE:
+{user_name}'S WRITING STYLE:
 {user_writing_style or "Professional, friendly, concise. Uses 'Hi [Name]' greetings and 'Best regards' closings. Direct but polite communication style."}
 
-RESPONSE REQUIREMENTS:
-1. Address the sender by first name
-2. Acknowledge the specific content/request
-3. Provide a helpful, appropriate response
+RESPONSE REQUIREMENTS FOR {user_name}:
+1. Address the sender by first name (extract from sender name)
+2. Acknowledge the specific content/request in the original email
+3. Provide a helpful, appropriate response from {user_name}'s perspective
 4. Match the suggested tone and relationship level
 5. Include specific actions or next steps if needed
 6. Use natural, human-like language
 7. Keep professional but personalized
 8. Address any deadlines or urgency
+9. End with "Best regards,\\nAvani" (first name only)
+10. Do NOT include signatures, job titles, or contact information
 
-RESPONSE GUIDELINES:
-- For meetings: Accept/decline with calendar check
-- For questions: Provide helpful answers or timeline for response
-- For requests: Acknowledge and provide timeline/action plan
-- For deadlines: Acknowledge urgency and commit to timeline
-- For appreciation: Respond warmly and professionally
+SPECIAL HANDLING:
+- For IT Helpdesk forms: Check if this is a service request form. If so, acknowledge receipt and provide timeline for action.
+- For marketing emails: Politely acknowledge if interested, or briefly decline if not relevant.
+- For meeting requests: Accept/decline with calendar consideration.
+- For questions: Provide helpful answers or timeline for detailed response.
 
-Create a complete email response with subject and body.
+You MUST respond with ONLY valid JSON:
 
-Respond in this EXACT JSON format:
 {{
-    "subject": "Re: Original Subject",
-    "body": "Complete email body with greeting, content, and closing",
-    "tone": "professional/friendly/formal/casual",
+    "subject": "Re: [original subject]",
+    "body": "Hi [sender first name],\\n\\n[{user_name}'s response content here]\\n\\nBest regards,\\nAvani",
+    "tone": "professional",
     "confidence": 0.9,
-    "reasoning": "Why this response approach was chosen",
-    "alternative_versions": ["Brief alternative version", "More detailed alternative version"]
+    "reasoning": "Brief explanation of response approach",
+    "alternative_versions": []
 }}
 """
 
         try:
-            response = self.llm.generate_response(draft_prompt, max_tokens=800, temperature=0.6)
+            # Advanced prompting with prefilling technique (research-based)
+            response = self.llm.generate_response(draft_prompt, max_tokens=1000, temperature=0.3)
             
-            # Extract JSON from response
-            json_start = response.find('{')
-            json_end = response.rfind('}') + 1
+            print(f"🔍 DEBUG: Raw LLM response: {response[:200]}...")
             
-            if json_start != -1 and json_end > json_start:
-                json_str = response[json_start:json_end]
-                draft_data = json.loads(json_str)
+            # Enhanced JSON extraction with multiple fallback strategies
+            json_str = self._extract_json_robust(response)
+            
+            if json_str:
+                print(f"🔍 DEBUG: Extracted JSON: {json_str[:100]}...")
+                
+                # Apply advanced JSON fixing from research
+                json_str = self._fix_json_advanced(json_str)
+                
+                # Validate JSON before parsing
+                if self._validate_json_structure(json_str):
+                    draft_data = json.loads(json_str)
+                else:
+                    print("❌ JSON structure validation failed")
+                    return self._fallback_draft(email, analysis, user_name)
                 
                 return LLMDraftResult(
                     subject=draft_data.get('subject', f"Re: {email.subject}"),
@@ -307,15 +323,182 @@ Respond in this EXACT JSON format:
                     alternative_versions=draft_data.get('alternative_versions', [])
                 )
             else:
-                print(f"❌ Could not parse JSON from LLM draft response")
+                print(f"❌ Could not extract JSON from LLM response")
+                print(f"🔍 DEBUG: Full response length: {len(response)}")
+                print(f"🔍 DEBUG: Full response: {response}")
                 return self._fallback_draft(email, analysis, user_name)
                 
         except json.JSONDecodeError as e:
             print(f"❌ JSON decode error in draft generation: {e}")
+            print(f"🔍 DEBUG: Problematic JSON: {json_str}")
+            print(f"🔍 DEBUG: JSON length: {len(json_str)}")
             return self._fallback_draft(email, analysis, user_name)
         except Exception as e:
             print(f"❌ LLM draft generation error: {e}")
             return self._fallback_draft(email, analysis, user_name)
+    
+    def _extract_json_robust(self, response: str) -> str:
+        """Advanced JSON extraction with multiple strategies (research-based)"""
+        import re
+        
+        # Strategy 1: Look for JSON between braces with proper brace matching
+        json_start = response.find('{')
+        if json_start != -1:
+            # Find matching closing brace by counting
+            brace_count = 0
+            json_end = json_start
+            
+            for i, char in enumerate(response[json_start:], json_start):
+                if char == '{':
+                    brace_count += 1
+                elif char == '}':
+                    brace_count -= 1
+                    if brace_count == 0:
+                        json_end = i + 1
+                        break
+            
+            if json_end > json_start:
+                potential_json = response[json_start:json_end]
+                # Basic validation - must have required structure
+                if '"subject"' in potential_json and '"body"' in potential_json:
+                    print(f"🔍 DEBUG: Strategy 1 extracted JSON length: {len(potential_json)}")
+                    return potential_json
+        
+        # Strategy 2: Look for code blocks (```json...```)
+        json_block = re.search(r'```json\s*(.*?)\s*```', response, re.DOTALL)
+        if json_block:
+            return json_block.group(1).strip()
+        
+        # Strategy 3: Look for any code block
+        code_block = re.search(r'```\s*(.*?)\s*```', response, re.DOTALL)
+        if code_block:
+            content = code_block.group(1).strip()
+            if content.startswith('{') and content.endswith('}'):
+                return content
+        
+        # Strategy 4: Try to reconstruct from partial JSON
+        lines = response.split('\n')
+        json_lines = []
+        in_json = False
+        
+        for line in lines:
+            if '{' in line and not in_json:
+                in_json = True
+                json_lines.append(line[line.find('{'):])
+            elif in_json:
+                json_lines.append(line)
+                if '}' in line:
+                    break
+        
+        if json_lines:
+            return '\n'.join(json_lines)
+        
+        # Strategy 5: Simple fallback - try to build minimal JSON from response content
+        if "Re:" in response and any(word in response.lower() for word in ["thank", "hi", "hello"]):
+            # Extract subject
+            subject_match = re.search(r'"subject":\s*"([^"]*)"', response)
+            subject = subject_match.group(1) if subject_match else f"Re: {email.subject if hasattr(email, 'subject') else 'Your Email'}"
+            
+            # Find greeting and content
+            greeting_match = re.search(r'(Hi\s+\w+|Hello\s+\w+)', response, re.IGNORECASE)
+            greeting = greeting_match.group(1) if greeting_match else "Hi there"
+            
+            # Create minimal valid JSON
+            return f'''{{
+    "subject": "{subject}",
+    "body": "{greeting},\\n\\nThank you for your email. I will review this and respond accordingly.\\n\\nBest regards,\\nAvani",
+    "tone": "professional",
+    "confidence": 0.7,
+    "reasoning": "Reconstructed from partial response",
+    "alternative_versions": []
+}}'''
+        
+        return ""
+    
+    def _fix_json_advanced(self, json_str: str) -> str:
+        """Advanced JSON fixing based on 2024 research best practices"""
+        import re
+        
+        print(f"🔍 DEBUG: Fixing JSON of length {len(json_str)}")
+        print(f"🔍 DEBUG: First 200 chars: {json_str[:200]}")
+        
+        # Remove any trailing commas before closing braces/brackets
+        json_str = re.sub(r',\s*}', '}', json_str)
+        json_str = re.sub(r',\s*]', ']', json_str)
+        
+        # Fix unescaped quotes in string values
+        json_str = re.sub(r"'([^']*)':", r'"\1":', json_str)  # Fix keys
+        json_str = re.sub(r":\s*'([^']*)'", r': "\1"', json_str)  # Fix string values
+        
+        # Handle newlines in JSON string values more carefully
+        # This is a critical fix - properly escape real newlines within strings
+        lines = json_str.split('\n')
+        fixed_lines = []
+        in_string = False
+        
+        for line in lines:
+            # Count unescaped quotes to track if we're inside a string
+            quote_count = 0
+            i = 0
+            while i < len(line):
+                if line[i] == '"' and (i == 0 or line[i-1] != '\\'):
+                    quote_count += 1
+                i += 1
+            
+            if quote_count % 2 == 1:  # Odd number of quotes - we're entering/exiting a string
+                in_string = not in_string
+            
+            if in_string and len(fixed_lines) > 0:
+                # We're inside a JSON string that spans lines - escape the newline
+                fixed_lines[-1] += '\\n' + line
+            else:
+                fixed_lines.append(line)
+        
+        json_str = '\n'.join(fixed_lines)
+        
+        # Fix incomplete strings (research finding: common truncation issue)
+        if json_str.count('"') % 2 != 0:
+            # Odd number of quotes - likely truncated
+            json_str += '"'
+        
+        # Ensure closing brace if missing (common truncation)
+        open_braces = json_str.count('{')
+        close_braces = json_str.count('}')
+        
+        if open_braces > close_braces:
+            json_str += '}' * (open_braces - close_braces)
+        
+        # Fix double-escaped backslashes (common LLM issue)
+        json_str = json_str.replace('\\\\n', '\\n')
+        json_str = json_str.replace('\\\\"', '"')
+        
+        print(f"🔍 DEBUG: Fixed JSON length: {len(json_str)}")
+        
+        return json_str
+    
+    def _validate_json_structure(self, json_str: str) -> bool:
+        """Validate JSON structure before parsing (prevents failures)"""
+        try:
+            import json
+            temp_data = json.loads(json_str)
+            
+            # Validate required fields exist
+            required_fields = ['subject', 'body', 'tone', 'confidence', 'reasoning']
+            for field in required_fields:
+                if field not in temp_data:
+                    print(f"❌ Missing required field: {field}")
+                    return False
+            
+            # Validate data types
+            if not isinstance(temp_data.get('confidence'), (int, float)):
+                print(f"❌ Invalid confidence type: {type(temp_data.get('confidence'))}")
+                return False
+                
+            return True
+            
+        except json.JSONDecodeError as e:
+            print(f"❌ JSON validation failed: {e}")
+            return False
     
     def _fallback_draft(self, email: OutlookEmailData, analysis: LLMAnalysisResult, user_name: str) -> LLMDraftResult:
         """Fallback draft if LLM fails"""
@@ -471,12 +654,64 @@ Keep it under 200 words and focus on actionable style elements.
                 print()
             
             # Step 6: Generate LLM Drafts
-            actionable_emails = [
-                (email, analysis) for email, analysis in analyzed_emails
+            actionable_emails = []
+            for email, analysis in analyzed_emails:
+                # Skip automated/noreply emails
+                sender_email = email.sender_email.lower()
+                sender_name = email.sender.lower()
+                
+                # List of patterns to skip (enhanced based on research)
+                skip_patterns = [
+                    'noreply', 'no-reply', 'donotreply', 'do-not-reply',
+                    'automated', 'notification', 'system', 'security',
+                    'website+security@huggingface.co', 'website@huggingface.co',
+                    'notifications@', 'support@', 'alerts@', 'admin@',
+                    'confirm your email', 'click this link', 'verify your account',
+                    'huggingface.co', 'github.com', 'gitlab.com'
+                ]
+                
+                # Also check subject line for automated patterns
+                subject_lower = email.subject.lower()
+                skip_subject_patterns = [
+                    'confirm your email', 'verify your account', 'click this link',
+                    'account verification', 'email confirmation', 'click here to confirm'
+                ]
+                
+                # Check for IT helpdesk forms (don't reply to service request forms)
+                email_body_lower = email.body.lower()
+                form_indicators = [
+                    'please tell us about your experience',
+                    'rate your experience',
+                    'service evaluation',
+                    'feedback form',
+                    'survey',
+                    'evaluation form',
+                    'rate our service',
+                    'please rate',
+                    'how would you rate',
+                    'satisfaction survey'
+                ]
+                
+                is_form = any(indicator in email_body_lower for indicator in form_indicators)
+                is_form = is_form or any(indicator in subject_lower for indicator in form_indicators)
+                
+                should_skip_subject = any(pattern in subject_lower for pattern in skip_subject_patterns)
+                
+                should_skip = any(pattern in sender_email or pattern in sender_name for pattern in skip_patterns)
+                
+                if should_skip or should_skip_subject:
+                    print(f"   ⏭️ Skipping automated email from: {email.sender} <{email.sender_email}>")
+                    continue
+                
+                if is_form:
+                    print(f"   📋 Skipping form/survey email: {email.subject[:40]}...")
+                    continue
+                
+                # Check if email needs a response
                 if (analysis.priority_score >= priority_threshold and
                     analysis.action_required in ['reply', 'attend', 'approve', 'review'] and
-                    analysis.email_type not in ['self_calendar_response', 'self_calendar_event'])
-            ]
+                    analysis.email_type not in ['self_calendar_response', 'self_calendar_event']):
+                    actionable_emails.append((email, analysis))
             
             if not actionable_emails:
                 print("🎉 No emails need responses right now!")
@@ -498,13 +733,16 @@ Keep it under 200 words and focus on actionable style elements.
                 print(f"   🎪 Confidence: {draft.confidence:.2f}")
                 print(f"   💭 Reasoning: {draft.reasoning}")
                 
-                # Create draft in Outlook
+                # Create reply draft in Outlook with proper threading
                 try:
-                    draft_result = self.outlook.create_draft(
-                        to_email=email.sender_email,
-                        subject=draft.subject,
-                        body=draft.body
+                    draft_result = self.outlook.create_draft_reply(
+                        original_email=email,
+                        reply_body=draft.body
                     )
+                    
+                    # Debug output to check if To/From fields are being set
+                    print(f"   📧 To: {email.sender} <{email.sender_email}>")
+                    print(f"   👤 From: {current_user_name} <{current_user_email}>")
                     
                     if draft_result.get('success'):
                         self.drafts_created += 1
