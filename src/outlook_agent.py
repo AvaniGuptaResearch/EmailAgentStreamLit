@@ -419,7 +419,6 @@ class OutlookService:
         try:
             user_info = self.get_user_info()
             current_user_email = user_info.get('email', '')
-            print(f"🔍 DEBUG: Current user email: {current_user_email}")
         except:
             current_user_email = ''
         
@@ -432,7 +431,6 @@ class OutlookService:
         
         endpoint = f"/me/mailFolders/inbox/messages?$filter={filter_query}&$select={select_fields}&$top={max_results}&$orderby=receivedDateTime desc"
         
-        print(f"🔍 DEBUG: API endpoint: {endpoint[:100]}...")
         
         try:
             result = self._make_graph_request(endpoint)
@@ -452,8 +450,6 @@ class OutlookService:
         """Parse Outlook email from Graph API response"""
         try:
             # Debug: Print raw message structure
-            print(f"🔍 DEBUG: Parsing email - ID: {message.get('id', 'unknown')[:10]}...")
-            print(f"🔍 DEBUG: Available fields: {list(message.keys())}")
             
             # Extract sender info - handle missing sender field
             sender_data = message.get('sender')
@@ -463,17 +459,14 @@ class OutlookService:
                 sender_email = sender_info.get('address', '')
             else:
                 # Handle emails without sender (drafts, sent items, etc.)
-                print(f"⚠️ DEBUG: Email missing sender field - skipping")
                 return None
             
-            print(f"🔍 DEBUG: Sender info - Name: '{sender_name}', Email: '{sender_email}'")
             
             # Extract recipient info
             recipients = message.get('toRecipients', [])
             recipient_emails = [r.get('emailAddress', {}).get('address', '') for r in recipients]
             recipient_names = [r.get('emailAddress', {}).get('name', '') for r in recipients]
             
-            print(f"🔍 DEBUG: Recipients - Emails: {recipient_emails}, Names: {recipient_names}")
             
             # Extract body content
             body_content = message.get('body', {})
@@ -509,7 +502,6 @@ class OutlookService:
             if conversation_id:
                 email_data.conversation_id = conversation_id
                 
-            print(f"✅ DEBUG: Successfully parsed email from '{sender_name}' <{sender_email}>")
             return email_data
         except Exception as e:
             print(f"Error parsing email: {e}")
@@ -647,9 +639,6 @@ class OutlookService:
         
         clean_html_reply = clean_html_reply.strip()
         
-        print(f"🔍 DEBUG: Original HTML reply length: {len(html_reply)}")
-        print(f"🔍 DEBUG: Cleaned HTML reply length: {len(clean_html_reply)}")
-        print(f"🔍 DEBUG: Cleaned content preview: {clean_html_reply[-100:] if len(clean_html_reply) > 100 else clean_html_reply}")
         
         # Create proper email reply format with original message quoted
         formatted_html = f"""<div style="font-family: Calibri, Arial, sans-serif; font-size: 11pt; color: #000000;">
@@ -721,8 +710,7 @@ Abu Dhabi, UAE<br>
         
         try:
             # Debug: Print draft data being sent
-            print(f"🔍 Creating draft with To: {draft_data['toRecipients'][0]['emailAddress']['name']} <{draft_data['toRecipients'][0]['emailAddress']['address']}>")
-            
+                        
             response = self._make_graph_request("/me/messages", method="POST", data=draft_data)
             print(f"✅ Draft created successfully: {subject}")
             return {"success": True, "draft_id": response.get("id"), "subject": subject}
@@ -734,7 +722,6 @@ Abu Dhabi, UAE<br>
         """Create a proper reply draft with threading and original message context"""
         # Always use manual draft creation to ensure we get the full email thread
         # The createReply API doesn't include the original message content
-        print(f"📧 Creating manual reply draft with full email thread...")
         return self._create_manual_draft_reply(original_email, reply_body)
     
     def _create_reply_draft_via_api(self, original_email: 'OutlookEmailData', reply_body: str) -> Dict:
@@ -810,7 +797,6 @@ Abu Dhabi, UAE<br>
         
         try:
             # Debug: Print draft data being sent
-            print(f"🔍 Creating manual reply with To: {draft_message['toRecipients'][0]['emailAddress']['name']} <{draft_message['toRecipients'][0]['emailAddress']['address']}>")
             
             response = self._make_graph_request("/me/messages", method="POST", data=draft_message)
             print(f"✅ Manual reply draft created: {subject}")

@@ -134,24 +134,32 @@ Preview: {email.body_preview}
 USER CONTEXT:
 {user_context or "Professional manager at a technology company"}
 
+PRIORITY ANALYSIS CRITERIA:
+1. UNREAD emails get +25 priority points (this is UNREAD: {not email.is_read})
+2. DEADLINE/URGENCY keywords: urgent, asap, critical, deadline, due, expires, today, tomorrow (+30 points)
+3. BUSINESS IMPORTANCE: meeting, approval, decision, client, proposal, contract, budget (+20 points)
+4. REQUESTS/QUESTIONS: Contains "?", "please", "can you", "need", "request" (+15 points)
+5. SENDER IMPORTANCE: CEO, Director, Manager, Client, Lead roles (+20 points)
+6. AGE: Older unread emails get higher priority (+15-25 points)
+
 ANALYSIS REQUIRED:
-1. Priority Score (0-100): How urgent/important is this email?
-2. Urgency Level: critical/urgent/normal/low
+1. Priority Score (0-100): Calculate based on above criteria
+2. Urgency Level: critical(85+)/urgent(70+)/normal(50+)/low(<50)
 3. Email Type: meeting/question/request/deadline/appreciation/information/complaint/announcement
 4. Action Required: reply/attend/approve/review/complete/none
 5. Key Points: Main topics/requests in the email (bullet points)
 6. Response Tone: formal/professional/friendly/casual
-7. Deadline Info: Any deadlines mentioned (be specific)
+7. Deadline Info: Any deadlines mentioned (be specific, extract date/time)
 8. Sender Relationship: manager/client/colleague/vendor/external
 9. Business Context: How this affects work/projects
 10. Confidence: How certain you are of this analysis (0-1)
 
-Consider factors:
-- Sender importance and relationship
-- Time sensitivity and deadlines  
-- Business impact and urgency keywords
-- Required actions and responses
-- Email thread context
+PROFESSIONAL EMAIL PRIORITIZATION:
+- Unread emails with deadlines = CRITICAL priority
+- Client/manager requests = HIGH priority
+- Meeting invitations = HIGH priority
+- Internal updates = MEDIUM priority
+- Newsletters/marketing = LOW priority
 
 Respond in this EXACT JSON format:
 {{
@@ -204,30 +212,82 @@ Respond in this EXACT JSON format:
             return self._fallback_analysis(email)
     
     def _fallback_analysis(self, email: OutlookEmailData) -> LLMAnalysisResult:
-        """Fallback analysis if LLM fails"""
+        """Enhanced fallback analysis with professional prioritization"""
         
-        # Simple keyword-based fallback
         text = (email.subject + " " + email.body).lower()
         
-        priority_score = 50.0
-        if any(word in text for word in ['urgent', 'asap', 'critical']):
-            priority_score += 30
+        # Start with base priority
+        priority_score = 40.0
+        
+        # UNREAD EMAILS get higher priority
         if not email.is_read:
+            priority_score += 25
+        
+        # DEADLINE/URGENCY keywords
+        urgent_keywords = ['urgent', 'asap', 'critical', 'immediate', 'deadline', 'due', 'expires', 'today', 'tomorrow']
+        if any(word in text for word in urgent_keywords):
+            priority_score += 30
+        
+        # BUSINESS IMPORTANCE keywords
+        important_keywords = ['meeting', 'approval', 'decision', 'budget', 'contract', 'client', 'proposal', 'review']
+        if any(word in text for word in important_keywords):
+            priority_score += 20
+        
+        # QUESTION/REQUEST indicators
+        if any(indicator in text for indicator in ['?', 'please', 'can you', 'could you', 'need', 'request']):
             priority_score += 15
         
-        urgency_level = 'urgent' if priority_score > 75 else 'normal' if priority_score > 50 else 'low'
+        # SENDER importance (basic heuristics)
+        sender_lower = email.sender.lower()
+        if any(title in sender_lower for title in ['ceo', 'cto', 'director', 'manager', 'lead']):
+            priority_score += 20
+        
+        # AGE of email (older unread emails are more important)
+        from datetime import datetime, timezone
+        try:
+            email_age_hours = (datetime.now(timezone.utc) - email.date).total_seconds() / 3600
+            if email_age_hours > 24 and not email.is_read:
+                priority_score += 15
+            elif email_age_hours > 72 and not email.is_read:
+                priority_score += 25
+        except:
+            pass
+        
+        # Cap at 100
+        priority_score = min(priority_score, 100.0)
+        
+        # Determine urgency level
+        if priority_score >= 85:
+            urgency_level = 'critical'
+        elif priority_score >= 70:
+            urgency_level = 'urgent'
+        elif priority_score >= 50:
+            urgency_level = 'normal'
+        else:
+            urgency_level = 'low'
+        
+        # Detect deadlines
+        deadline_info = None
+        deadline_patterns = ['due ', 'deadline ', 'by ', 'expires ', 'until ']
+        for pattern in deadline_patterns:
+            if pattern in text:
+                # Try to extract deadline context
+                start_idx = text.find(pattern)
+                deadline_context = text[start_idx:start_idx+50]
+                deadline_info = deadline_context.strip()
+                break
         
         return LLMAnalysisResult(
             priority_score=priority_score,
             urgency_level=urgency_level,
-            email_type='normal',
-            action_required='reply' if '?' in text else 'none',
-            key_points=['Email content analysis'],
+            email_type='request' if '?' in text or 'please' in text else 'information',
+            action_required='reply' if priority_score > 60 else 'review',
+            key_points=['Professional email requiring attention'],
             suggested_response_tone='professional',
-            deadline_info=None,
-            sender_relationship='colleague',
-            business_context='Standard business communication',
-            confidence=0.3
+            deadline_info=deadline_info,
+            sender_relationship='professional',
+            business_context='Business communication requiring timely response',
+            confidence=0.6
         )
 
 class LLMResponseDrafter:
@@ -237,7 +297,7 @@ class LLMResponseDrafter:
         self.llm = llm_service
     
     def generate_draft(self, email: OutlookEmailData, analysis: LLMAnalysisResult, 
-                      user_writing_style: str = "", user_name: str = "Avani Gupta") -> LLMDraftResult:
+                      user_writing_style: str = "", user_name: str = "", user_email: str = "") -> LLMDraftResult:
         """Generate personalized draft response using LLM"""
         
         draft_prompt = f"""
@@ -271,7 +331,7 @@ RESPONSE REQUIREMENTS FOR {user_name}:
 6. Use natural, human-like language
 7. Keep professional but personalized
 8. Address any deadlines or urgency
-9. End with "Best regards,\\nAvani" (first name only)
+9. End with "Best regards,\\n{user_name.split()[0] if user_name else 'Best'}" (first name only)
 10. Do NOT include signatures, job titles, or contact information
 
 SPECIAL HANDLING:
@@ -284,7 +344,7 @@ You MUST respond with ONLY valid JSON:
 
 {{
     "subject": "Re: [original subject]",
-    "body": "Hi [sender first name],\\n\\n[{user_name}'s response content here]\\n\\nBest regards,\\nAvani",
+    "body": "Hi [sender first name],\\n\\n[{user_name}'s response content here]\\n\\nBest regards,\\n{user_name.split()[0] if user_name else 'Best'}",
     "tone": "professional",
     "confidence": 0.9,
     "reasoning": "Brief explanation of response approach",
@@ -296,13 +356,11 @@ You MUST respond with ONLY valid JSON:
             # Advanced prompting with prefilling technique (research-based)
             response = self.llm.generate_response(draft_prompt, max_tokens=1000, temperature=0.3)
             
-            print(f"🔍 DEBUG: Raw LLM response: {response[:200]}...")
             
             # Enhanced JSON extraction with multiple fallback strategies
             json_str = self._extract_json_robust(response)
             
             if json_str:
-                print(f"🔍 DEBUG: Extracted JSON: {json_str[:100]}...")
                 
                 # Apply advanced JSON fixing from research
                 json_str = self._fix_json_advanced(json_str)
@@ -312,7 +370,7 @@ You MUST respond with ONLY valid JSON:
                     draft_data = json.loads(json_str)
                 else:
                     print("❌ JSON structure validation failed")
-                    return self._fallback_draft(email, analysis, user_name)
+                    return self._fallback_draft(email, analysis, user_name, user_email)
                 
                 return LLMDraftResult(
                     subject=draft_data.get('subject', f"Re: {email.subject}"),
@@ -324,18 +382,14 @@ You MUST respond with ONLY valid JSON:
                 )
             else:
                 print(f"❌ Could not extract JSON from LLM response")
-                print(f"🔍 DEBUG: Full response length: {len(response)}")
-                print(f"🔍 DEBUG: Full response: {response}")
-                return self._fallback_draft(email, analysis, user_name)
+                return self._fallback_draft(email, analysis, user_name, user_email)
                 
         except json.JSONDecodeError as e:
             print(f"❌ JSON decode error in draft generation: {e}")
-            print(f"🔍 DEBUG: Problematic JSON: {json_str}")
-            print(f"🔍 DEBUG: JSON length: {len(json_str)}")
-            return self._fallback_draft(email, analysis, user_name)
+            return self._fallback_draft(email, analysis, user_name, user_email)
         except Exception as e:
             print(f"❌ LLM draft generation error: {e}")
-            return self._fallback_draft(email, analysis, user_name)
+            return self._fallback_draft(email, analysis, user_name, user_email)
     
     def _extract_json_robust(self, response: str) -> str:
         """Advanced JSON extraction with multiple strategies (research-based)"""
@@ -361,7 +415,6 @@ You MUST respond with ONLY valid JSON:
                 potential_json = response[json_start:json_end]
                 # Basic validation - must have required structure
                 if '"subject"' in potential_json and '"body"' in potential_json:
-                    print(f"🔍 DEBUG: Strategy 1 extracted JSON length: {len(potential_json)}")
                     return potential_json
         
         # Strategy 2: Look for code blocks (```json...```)
@@ -419,8 +472,6 @@ You MUST respond with ONLY valid JSON:
         """Advanced JSON fixing based on 2024 research best practices"""
         import re
         
-        print(f"🔍 DEBUG: Fixing JSON of length {len(json_str)}")
-        print(f"🔍 DEBUG: First 200 chars: {json_str[:200]}")
         
         # Remove any trailing commas before closing braces/brackets
         json_str = re.sub(r',\s*}', '}', json_str)
@@ -472,7 +523,6 @@ You MUST respond with ONLY valid JSON:
         json_str = json_str.replace('\\\\n', '\\n')
         json_str = json_str.replace('\\\\"', '"')
         
-        print(f"🔍 DEBUG: Fixed JSON length: {len(json_str)}")
         
         return json_str
     
@@ -500,11 +550,11 @@ You MUST respond with ONLY valid JSON:
             print(f"❌ JSON validation failed: {e}")
             return False
     
-    def _fallback_draft(self, email: OutlookEmailData, analysis: LLMAnalysisResult, user_name: str) -> LLMDraftResult:
+    def _fallback_draft(self, email: OutlookEmailData, analysis: LLMAnalysisResult, user_name: str, user_email: str = "") -> LLMDraftResult:
         """Fallback draft if LLM fails"""
         
         sender_first_name = email.sender.split()[0] if email.sender else "there"
-        first_name_only = user_name.split()[0] if user_name else "Avani"
+        first_name_only = user_name.split()[0] if user_name else "User"
         
         if analysis.action_required == "attend":
             body = f"Hi {sender_first_name},\n\nThank you for the meeting invitation. I'll check my calendar and confirm my attendance shortly.\n\nBest regards,\n{first_name_only}"
@@ -583,7 +633,7 @@ Keep it under 200 words and focus on actionable style elements.
             print(f"❌ Writing style analysis failed: {e}")
             return "Professional, friendly, concise communication style with polite greetings and closings."
     
-    def process_emails_with_llm(self, max_emails: int = 10, priority_threshold: float = 60.0):
+    def process_emails_with_llm(self, max_emails: int = 20, priority_threshold: float = 50.0):
         """Main workflow using LLM for analysis and drafting"""
         
         print("🤖 LLM-Enhanced Email Agent")
@@ -621,7 +671,7 @@ Keep it under 200 words and focus on actionable style elements.
             analyzed_emails = []
             
             for email in emails:
-                print(f"   🔍 Analyzing: {email.subject[:40]}...")
+                print(f"   📧 Analyzing: {email.subject[:40]}...")
                 analysis = self.analyzer.analyze_email(email, f"User: {current_user_name}, Email: {current_user_email}")
                 
                 # Update email with LLM analysis
@@ -636,21 +686,54 @@ Keep it under 200 words and focus on actionable style elements.
             # Sort by LLM-determined priority
             analyzed_emails.sort(key=lambda x: x[1].priority_score, reverse=True)
             
-            # Step 5: Display LLM Analysis Results
-            print(f"\n🎯 LLM Analysis Results:")
+            # Step 5: Display LLM Analysis Results with professional prioritization
+            print(f"\n🎯 PROFESSIONAL EMAIL PRIORITIZATION:")
             print("-" * 60)
             
-            for i, (email, analysis) in enumerate(analyzed_emails):
-                urgency_emoji = "🔴" if analysis.urgency_level in ["urgent", "critical"] else "🟡" if analysis.urgency_level == "normal" else "🟢"
-                
-                print(f"{i+1}. {urgency_emoji} {email.subject[:45]}...")
-                print(f"    From: {email.sender}")
-                print(f"    LLM Priority: {analysis.priority_score:.1f} ({analysis.urgency_level})")
-                print(f"    Type: {analysis.email_type} | Action: {analysis.action_required}")
-                print(f"    Key Points: {', '.join(analysis.key_points[:2])}")
-                if analysis.deadline_info:
-                    print(f"    ⏰ Deadline: {analysis.deadline_info}")
-                print(f"    Confidence: {analysis.confidence:.2f}")
+            # Separate emails by priority categories
+            critical_emails = [(email, analysis) for email, analysis in analyzed_emails if analysis.priority_score >= 85]
+            urgent_emails = [(email, analysis) for email, analysis in analyzed_emails if 70 <= analysis.priority_score < 85]
+            normal_emails = [(email, analysis) for email, analysis in analyzed_emails if 50 <= analysis.priority_score < 70]
+            low_emails = [(email, analysis) for email, analysis in analyzed_emails if analysis.priority_score < 50]
+            
+            # Display by priority categories
+            if critical_emails:
+                print("🔴 CRITICAL PRIORITY (85+):")
+                for i, (email, analysis) in enumerate(critical_emails):
+                    unread_indicator = "📬 UNREAD" if not email.is_read else "📭"
+                    print(f"   {i+1}. {unread_indicator} {email.subject[:40]}...")
+                    print(f"      From: {email.sender} | Score: {analysis.priority_score:.1f}")
+                    print(f"      Action: {analysis.action_required} | Type: {analysis.email_type}")
+                    if analysis.deadline_info:
+                        print(f"      ⏰ DEADLINE: {analysis.deadline_info}")
+                    print()
+            
+            if urgent_emails:
+                print("🟡 URGENT PRIORITY (70-84):")
+                for i, (email, analysis) in enumerate(urgent_emails):
+                    unread_indicator = "📬 UNREAD" if not email.is_read else "📭"
+                    print(f"   {i+1}. {unread_indicator} {email.subject[:40]}...")
+                    print(f"      From: {email.sender} | Score: {analysis.priority_score:.1f}")
+                    print(f"      Action: {analysis.action_required} | Type: {analysis.email_type}")
+                    if analysis.deadline_info:
+                        print(f"      ⏰ Deadline: {analysis.deadline_info}")
+                    print()
+            
+            if normal_emails:
+                print("🟢 NORMAL PRIORITY (50-69):")
+                for i, (email, analysis) in enumerate(normal_emails):
+                    unread_indicator = "📬 UNREAD" if not email.is_read else "📭"
+                    print(f"   {i+1}. {unread_indicator} {email.subject[:40]}...")
+                    print(f"      From: {email.sender} | Score: {analysis.priority_score:.1f}")
+                    print(f"      Action: {analysis.action_required}")
+                    print()
+            
+            if low_emails:
+                print("⚪ LOW PRIORITY (<50) - Consider batch processing:")
+                for i, (email, analysis) in enumerate(low_emails[:3]):  # Show only first 3
+                    print(f"   {i+1}. {email.subject[:40]}... (Score: {analysis.priority_score:.1f})")
+                if len(low_emails) > 3:
+                    print(f"   ... and {len(low_emails) - 3} more low priority emails")
                 print()
             
             # Step 6: Generate LLM Drafts
@@ -724,7 +807,7 @@ Keep it under 200 words and focus on actionable style elements.
                 print(f"\n✨ Generating LLM draft {i+1}: {email.subject[:40]}...")
                 
                 # Generate LLM draft
-                draft = self.drafter.generate_draft(email, analysis, writing_style, current_user_name)
+                draft = self.drafter.generate_draft(email, analysis, writing_style, current_user_name, current_user_email)
                 self.llm_calls += 1
                 
                 print(f"   🤖 LLM Draft Generated:")
@@ -759,15 +842,34 @@ Keep it under 200 words and focus on actionable style elements.
                     print(f"   ❌ Error creating draft: {e}")
                     print(f"   📝 Draft content:\n{draft.body}")
             
-            # Step 7: Summary
-            print(f"\n🎯 LLM-ENHANCED SUMMARY")
-            print("=" * 35)
-            print(f"📧 Emails analyzed: {self.emails_analyzed}")
-            print(f"🤖 LLM calls made: {self.llm_calls}")
-            print(f"📝 Drafts created: {self.drafts_created}")
-            print(f"⏱️ Time saved: ~{self.drafts_created * 15} minutes")
-            print(f"🎯 Quality: Personalized LLM-generated responses")
-            print(f"📁 Check your Outlook Drafts folder!")
+            # Step 7: Professional Summary
+            print(f"\n🎯 PROFESSIONAL EMAIL ASSISTANT SUMMARY")
+            print("=" * 45)
+            
+            # Count by priority
+            critical_count = len([e for e, a in analyzed_emails if a.priority_score >= 85])
+            urgent_count = len([e for e, a in analyzed_emails if 70 <= a.priority_score < 85])
+            unread_count = len([e for e, a in analyzed_emails if not e.is_read])
+            deadline_count = len([e for e, a in analyzed_emails if a.deadline_info])
+            
+            print(f"📊 EMAIL ANALYSIS:")
+            print(f"   📧 Total emails analyzed: {self.emails_analyzed}")
+            print(f"   📬 Unread emails: {unread_count}")
+            print(f"   🔴 Critical priority: {critical_count}")
+            print(f"   🟡 Urgent priority: {urgent_count}")
+            print(f"   ⏰ With deadlines: {deadline_count}")
+            print()
+            print(f"🤖 AI ASSISTANCE:")
+            print(f"   🧠 LLM analysis calls: {self.llm_calls}")
+            print(f"   📝 Response drafts created: {self.drafts_created}")
+            print(f"   ⏱️ Estimated time saved: ~{self.drafts_created * 12} minutes")
+            print()
+            print(f"✅ NEXT STEPS:")
+            print(f"   1. Review critical/urgent emails first")
+            print(f"   2. Check Outlook Drafts folder for AI-generated responses")
+            print(f"   3. Address deadline emails immediately")
+            print(f"   4. Process normal priority emails in batches")
+            print(f"📁 All drafts saved to: Outlook > Drafts folder")
             
         except Exception as e:
             print(f"❌ Error in LLM processing: {e}")
