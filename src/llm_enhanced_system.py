@@ -113,7 +113,7 @@ class LLMEmailAnalyzer:
     def __init__(self, llm_service: OllamaLLMService):
         self.llm = llm_service
     
-    def analyze_email(self, email: OutlookEmailData, user_context: str = "") -> LLMAnalysisResult:
+    def analyze_email(self, email: OutlookEmailData, user_context: str = "", email_thread_context: str = "") -> LLMAnalysisResult:
         """Analyze email using LLM for sophisticated understanding"""
         
         analysis_prompt = f"""
@@ -133,6 +133,9 @@ Preview: {email.body_preview}
 
 USER CONTEXT:
 {user_context or "Professional manager at a technology company"}
+
+EMAIL THREAD CONTEXT:
+{email_thread_context or "This appears to be a standalone email or start of new thread"}
 
 PRIORITY ANALYSIS CRITERIA:
 1. UNREAD emails get +25 priority points (this is UNREAD: {not email.is_read})
@@ -155,11 +158,20 @@ ANALYSIS REQUIRED:
 10. Confidence: How certain you are of this analysis (0-1)
 
 PROFESSIONAL EMAIL PRIORITIZATION:
-- Unread emails with deadlines = CRITICAL priority
-- Client/manager requests = HIGH priority
-- Meeting invitations = HIGH priority
-- Internal updates = MEDIUM priority
-- Newsletters/marketing = LOW priority
+- Unread emails with deadlines = CRITICAL priority (90+)
+- Client/manager/CEO requests = CRITICAL priority (85+)
+- Meeting invitations from important people = HIGH priority (75+)
+- Project updates with deadlines = HIGH priority (70+)
+- Questions requiring answers = MEDIUM priority (60+)
+- Internal updates = MEDIUM priority (50+)
+- Newsletters/marketing = LOW priority (20-)
+
+SMART CATEGORIZATION:
+- URGENT: Contains deadline words, marked urgent, from VIP sender
+- ACTIONABLE: Contains questions, requests, meeting invites
+- INFORMATIONAL: Updates, announcements, newsletters
+- SOCIAL: Personal emails, congratulations, thank you notes
+- AUTOMATED: System emails, notifications, confirmations
 
 Respond in this EXACT JSON format:
 {{
@@ -237,10 +249,27 @@ Respond in this EXACT JSON format:
         if any(indicator in text for indicator in ['?', 'please', 'can you', 'could you', 'need', 'request']):
             priority_score += 15
         
-        # SENDER importance (basic heuristics)
+        # SENDER importance (enhanced detection)
         sender_lower = email.sender.lower()
-        if any(title in sender_lower for title in ['ceo', 'cto', 'director', 'manager', 'lead']):
+        sender_email_lower = email.sender_email.lower()
+        
+        # VIP titles get highest priority
+        vip_titles = ['ceo', 'cto', 'cfo', 'president', 'vice president', 'director', 'head of']
+        if any(title in sender_lower for title in vip_titles):
+            priority_score += 35
+        
+        # Management titles
+        mgmt_titles = ['manager', 'lead', 'supervisor', 'team lead', 'project manager']
+        if any(title in sender_lower for title in mgmt_titles):
+            priority_score += 25
+        
+        # Client/external importance
+        if 'client' in sender_lower or (any(domain in sender_email_lower for domain in ['.com', '.org', '.net']) and 'mbzuai.ac.ae' not in sender_email_lower):
             priority_score += 20
+        
+        # Internal colleague
+        if 'mbzuai.ac.ae' in sender_email_lower:
+            priority_score += 10
         
         # AGE of email (older unread emails are more important)
         from datetime import datetime, timezone
@@ -301,14 +330,16 @@ class LLMResponseDrafter:
         """Generate personalized draft response using LLM"""
         
         draft_prompt = f"""
-You are {user_name}, responding to an email. Write an email response FROM {user_name}'s perspective, not TO {user_name}.
+CONTEXT: {user_name} received an email and needs to write a response.
 
-ORIGINAL EMAIL RECEIVED BY {user_name}:
-From: {email.sender}
+EMAIL THAT {user_name} RECEIVED:
+From: {email.sender} <{email.sender_email}>
+To: {user_name}
 Subject: {email.subject}
 Content: {email.body[:800]}
 
-YOUR TASK: Write {user_name}'s response to this email.
+YOUR TASK: Write {user_name}'s reply email TO {email.sender}.
+IMPORTANT: You are writing AS {user_name}, responding TO {email.sender}.
 
 ANALYSIS CONTEXT:
 - Email Type: {analysis.email_type}
@@ -331,8 +362,9 @@ RESPONSE REQUIREMENTS FOR {user_name}:
 6. Use natural, human-like language
 7. Keep professional but personalized
 8. Address any deadlines or urgency
-9. End with "Best regards,\\n{user_name.split()[0] if user_name else 'Best'}" (first name only)
-10. Do NOT include signatures, job titles, or contact information
+9. CRITICAL: Do NOT include ANY closing like "Best regards", "Sincerely", etc.
+10. Do NOT include ANY signature, contact details, or organizational information
+11. End the response with the actual email content only
 
 SPECIAL HANDLING:
 - For IT Helpdesk forms: Check if this is a service request form. If so, acknowledge receipt and provide timeline for action.
@@ -340,21 +372,40 @@ SPECIAL HANDLING:
 - For meeting requests: Accept/decline with calendar consideration.
 - For questions: Provide helpful answers or timeline for detailed response.
 
-You MUST respond with ONLY valid JSON:
+You MUST respond with ONLY valid JSON. Generate the email content that will go after "Hi [SenderName]," 
+
+SENDER INFO: The email is from {email.sender} <{email.sender_email}>
+EXTRACT FIRST NAME: {email.sender.split()[0] if email.sender else 'there'}
+
+EXAMPLE: If the sender name is "John Smith", your response should start with "Hi John,"
 
 {{
-    "subject": "Re: [original subject]",
-    "body": "Hi [sender first name],\\n\\n[{user_name}'s response content here]\\n\\nBest regards,\\n{user_name.split()[0] if user_name else 'Best'}",
+    "subject": "Re: [original subject]", 
+    "body": "Hi {email.sender.split()[0] if email.sender else 'there'},\\n\\nThank you for reminding us about the deadline. We are working on the modules and will ensure timely submission through the portal.",
     "tone": "professional",
     "confidence": 0.9,
-    "reasoning": "Brief explanation of response approach",
+    "reasoning": "Acknowledging deadline and providing action plan",
     "alternative_versions": []
 }}
+
+CRITICAL REQUIREMENTS:
+- Use the actual sender's first name, NOT placeholder text
+- If sender is "John Smith", write "Hi John," NOT "Hi [SenderFirstName],"
+- Write {user_name}'s response TO this specific sender
+- Address their specific request/content
+- Be helpful and professional
+- 2-3 sentences minimum
+- NO signatures or closings (Outlook will add these automatically)
 """
 
         try:
-            # Advanced prompting with prefilling technique (research-based)
+            # Advanced prompting with prefiling technique (research-based)
             response = self.llm.generate_response(draft_prompt, max_tokens=1000, temperature=0.3)
+            
+            # Check if response is empty or too short
+            if not response or len(response.strip()) < 20:
+                print(f"⚠️ LLM response too short or empty, using fallback")
+                return self._fallback_draft(email, analysis, user_name, user_email)
             
             
             # Enhanced JSON extraction with multiple fallback strategies
@@ -372,11 +423,15 @@ You MUST respond with ONLY valid JSON:
                     print("❌ JSON structure validation failed")
                     return self._fallback_draft(email, analysis, user_name, user_email)
                 
+                # Calculate response quality score
+                response_body = draft_data.get('body', '')
+                quality_score = self._calculate_response_quality(response_body, email, analysis)
+                
                 return LLMDraftResult(
                     subject=draft_data.get('subject', f"Re: {email.subject}"),
-                    body=draft_data.get('body', ''),
+                    body=response_body,
                     tone=draft_data.get('tone', 'professional'),
-                    confidence=float(draft_data.get('confidence', 0.7)),
+                    confidence=min(float(draft_data.get('confidence', 0.7)), quality_score),
                     reasoning=draft_data.get('reasoning', ''),
                     alternative_versions=draft_data.get('alternative_versions', [])
                 )
@@ -390,6 +445,45 @@ You MUST respond with ONLY valid JSON:
         except Exception as e:
             print(f"❌ LLM draft generation error: {e}")
             return self._fallback_draft(email, analysis, user_name, user_email)
+    
+    def _calculate_response_quality(self, response_body: str, email: OutlookEmailData, analysis: LLMAnalysisResult) -> float:
+        """Calculate quality score for the generated response (open-source technique)"""
+        
+        quality_score = 1.0
+        
+        # Check if response addresses the original email content
+        original_keywords = set(email.subject.lower().split() + email.body[:500].lower().split())
+        response_keywords = set(response_body.lower().split())
+        keyword_overlap = len(original_keywords & response_keywords) / max(len(original_keywords), 1)
+        
+        if keyword_overlap < 0.1:
+            quality_score -= 0.3  # Poor content relevance
+        elif keyword_overlap > 0.3:
+            quality_score += 0.1  # Good content relevance
+        
+        # Check response length appropriateness
+        response_words = len(response_body.split())
+        if response_words < 10:
+            quality_score -= 0.2  # Too short
+        elif response_words > 200:
+            quality_score -= 0.1  # Too long
+        elif 20 <= response_words <= 100:
+            quality_score += 0.1  # Good length
+        
+        # Check if it addresses the action required
+        if analysis.action_required == "reply" and len(response_body) < 20:
+            quality_score -= 0.2
+        
+        # Check for professional tone indicators
+        professional_indicators = ['thank you', 'please', 'appreciate', 'understand', 'assist']
+        if any(indicator in response_body.lower() for indicator in professional_indicators):
+            quality_score += 0.1
+        
+        # Penalty for remaining signatures (shouldn't happen but check)
+        if any(sig in response_body.lower() for sig in ['best regards', 'sincerely', 'client ai engineer']):
+            quality_score -= 0.3
+        
+        return max(0.3, min(1.0, quality_score))
     
     def _extract_json_robust(self, response: str) -> str:
         """Advanced JSON extraction with multiple strategies (research-based)"""
@@ -556,12 +650,19 @@ You MUST respond with ONLY valid JSON:
         sender_first_name = email.sender.split()[0] if email.sender else "there"
         first_name_only = user_name.split()[0] if user_name else "User"
         
+        # Generate more specific responses based on content
+        original_content = email.body.lower()
+        
         if analysis.action_required == "attend":
-            body = f"Hi {sender_first_name},\n\nThank you for the meeting invitation. I'll check my calendar and confirm my attendance shortly.\n\nBest regards,\n{first_name_only}"
+            body = f"Hi {sender_first_name},\n\nThank you for the meeting invitation. I'll check my calendar and confirm my attendance shortly."
+        elif 'deadline' in original_content:
+            body = f"Hi {sender_first_name},\n\nThank you for reminding me about the deadline. I'm working on this and will ensure timely completion as requested."
+        elif 'question' in original_content or '?' in email.body:
+            body = f"Hi {sender_first_name},\n\nThank you for your question. I'll review the details and provide you with a comprehensive response shortly."
         elif analysis.action_required == "reply":
-            body = f"Hi {sender_first_name},\n\nThank you for your email. I've received your message and will respond with details shortly.\n\nBest regards,\n{first_name_only}"
+            body = f"Hi {sender_first_name},\n\nThank you for your email. I've received your message and will respond with the necessary details shortly."
         else:
-            body = f"Hi {sender_first_name},\n\nThank you for your email. I'll review this and get back to you soon.\n\nBest regards,\n{first_name_only}"
+            body = f"Hi {sender_first_name},\n\nThank you for your email. I'll review this and get back to you soon with the relevant information."
         
         return LLMDraftResult(
             subject=f"Re: {email.subject}",
@@ -672,7 +773,12 @@ Keep it under 200 words and focus on actionable style elements.
             
             for email in emails:
                 print(f"   📧 Analyzing: {email.subject[:40]}...")
-                analysis = self.analyzer.analyze_email(email, f"User: {current_user_name}, Email: {current_user_email}")
+                
+                # Enhanced context with thread analysis
+                thread_context = self._analyze_email_thread(email)
+                user_context = f"User: {current_user_name}, Email: {current_user_email}, Role: Professional at MBZUAI"
+                
+                analysis = self.analyzer.analyze_email(email, user_context, thread_context)
                 
                 # Update email with LLM analysis
                 email.priority_score = analysis.priority_score
@@ -875,6 +981,36 @@ Keep it under 200 words and focus on actionable style elements.
             print(f"❌ Error in LLM processing: {e}")
             import traceback
             traceback.print_exc()
+    
+    def _analyze_email_thread(self, email: OutlookEmailData) -> str:
+        """Analyze email thread context (open-source technique)"""
+        
+        thread_indicators = []
+        
+        # Check if it's a reply
+        if email.subject.startswith(('Re:', 'RE:', 'Fwd:', 'FW:')):
+            thread_indicators.append("This is part of an ongoing email thread")
+        
+        # Check for forwarded emails
+        if 'forwarded' in email.body.lower() or 'from:' in email.body[:200].lower():
+            thread_indicators.append("This email contains forwarded content")
+        
+        # Check for urgency escalation
+        urgency_words = ['urgent', 'asap', 'immediate', 'deadline', 'overdue']
+        if any(word in email.subject.lower() for word in urgency_words):
+            thread_indicators.append("This email has urgency indicators")
+        
+        # Check for follow-up patterns
+        followup_patterns = ['follow up', 'following up', 'reminder', 'checking in', 'update on']
+        if any(pattern in email.body.lower()[:300] for pattern in followup_patterns):
+            thread_indicators.append("This appears to be a follow-up email")
+        
+        # Check for meeting-related thread
+        meeting_words = ['meeting', 'schedule', 'calendar', 'appointment', 'call']
+        if any(word in email.subject.lower() for word in meeting_words):
+            thread_indicators.append("This email is related to scheduling/meetings")
+        
+        return "; ".join(thread_indicators) if thread_indicators else "Standalone email without clear thread context"
 
 # Example usage and CLI
 def main():

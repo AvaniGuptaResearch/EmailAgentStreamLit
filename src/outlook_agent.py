@@ -563,33 +563,23 @@ class OutlookService:
         return formatted_html
     
     def _format_reply_body_with_signature(self, reply_body: str) -> str:
-        """Format reply body with professional signature - FOR CREATEREPLY API"""
+        """Format reply body using proper HTML paragraphs to avoid signature insertion issues"""
         
-        # Clean the reply body more aggressively since it already has LLM signature
-        import re
+        # Split content into paragraphs and wrap each in <p> tags
+        paragraphs = reply_body.split('\n\n')
+        html_paragraphs = []
         
-        # Remove any existing signatures from LLM-generated content
-        clean_body = reply_body
+        for para in paragraphs:
+            if para.strip():
+                # Replace single newlines with spaces, wrap in <p> tags
+                clean_para = para.replace('\n', ' ').strip()
+                html_paragraphs.append(f"<p>{clean_para}</p>")
         
-        # Remove LLM-generated signatures
-        signature_patterns = [
-            r'Best regards,\s*Avani.*?Mohammed Bin Zayed University of Artificial Intelligence',
-            r'Best regards,\s*Avani Gupta.*?Research Office.*?UAE',
-            r'Best regards,\s*Avani\s*$'
-        ]
-        
-        for pattern in signature_patterns:
-            clean_body = re.sub(pattern, '', clean_body, flags=re.DOTALL | re.IGNORECASE)
-        
-        # Clean up extra whitespace
-        clean_body = clean_body.strip()
-        
-        # Convert to HTML - let Outlook add the signature automatically
-        # For createReply API, we should let Outlook handle the signature
-        html_reply = clean_body.replace('\n', '<br>\n')
+        # Join all paragraphs into a single block
+        html_content = ''.join(html_paragraphs)
         
         formatted_html = f"""<div style="font-family: Calibri, Arial, sans-serif; font-size: 11pt;">
-{html_reply}
+{html_content}
 </div>"""
         
         return formatted_html
@@ -597,8 +587,18 @@ class OutlookService:
     def _format_email_body_with_thread(self, reply_body: str, original_email: 'OutlookEmailData') -> str:
         """Format email body with proper threading and original message context"""
         
-        # Convert reply to HTML
-        html_reply = reply_body.replace('\n', '<br>\n')
+        # Use proper HTML paragraph formatting for reply (to prevent signature insertion issues)
+        paragraphs = reply_body.split('\n\n')
+        html_paragraphs = []
+        
+        for para in paragraphs:
+            if para.strip():
+                # Replace single newlines with spaces, wrap in <p> tags
+                clean_para = para.replace('\n', ' ').strip()
+                html_paragraphs.append(f"<p>{clean_para}</p>")
+        
+        # Join all paragraphs into reply content
+        html_reply = ''.join(html_paragraphs)
         
         # Format the original message date properly
         try:
@@ -612,61 +612,36 @@ class OutlookService:
         # Get clean original message content
         if hasattr(original_email, 'body') and original_email.body:
             original_body = self._clean_html(original_email.body)
+            print(f"📧 Using original email body: {len(original_body)} characters")
         elif hasattr(original_email, 'body_preview') and original_email.body_preview:
             original_body = original_email.body_preview
+            print(f"📧 Using original email preview: {len(original_body)} characters")
         else:
             original_body = "Original message content not available"
+            print(f"⚠️ Original email content not available")
         
         # Get recipient info (who the original email was sent to)
         recipient = getattr(original_email, 'recipient', 'me')
         
-        # Remove any "Best regards, Avani" from LLM content since we'll add full signature
-        import re
+        # Get user info for signature
+        try:
+            user_info = self.get_user_info()
+            user_name = user_info.get('name', 'User')
+        except:
+            user_name = 'User'
         
-        # More comprehensive signature removal
-        clean_html_reply = html_reply
-        
-        # Remove various signature patterns
-        signature_remove_patterns = [
-            r'Best regards,\s*Avani\s*$',
-            r'Best regards,\s*Avani\s*\n*$',
-            r'Best regards,\s*\n*Avani\s*$',
-            r'Best regards,\s*\n*Avani\s*\n*$'
-        ]
-        
-        for pattern in signature_remove_patterns:
-            clean_html_reply = re.sub(pattern, '', clean_html_reply, flags=re.IGNORECASE | re.MULTILINE)
-        
-        clean_html_reply = clean_html_reply.strip()
-        
-        
-        # Create proper email reply format with original message quoted
+        # Create complete email with reply and thread history - NO manual signature to avoid placement issues
         formatted_html = f"""<div style="font-family: Calibri, Arial, sans-serif; font-size: 11pt; color: #000000;">
-{clean_html_reply}
-
-<br><br>
-<div style="color: #000000;">
-<strong>Best regards,</strong><br><br>
-<strong>Avani Gupta</strong><br>
-Client AI Engineer<br>
-Research Office<br>
-P +971 2 811 3417 &nbsp;&nbsp;W <a href="https://www.mbzuai.ac.ae" style="color: #000000;">www.mbzuai.ac.ae</a><br>
-Abu Dhabi, UAE<br>
-<br>
-<!-- MBZUAI Logo -->
-<div style="margin-top: 10px; font-size: 9pt; color: #666666;">
-<em>Mohammed Bin Zayed University of Artificial Intelligence</em>
-</div>
+{html_reply}
 </div>
 
-<hr style="border: none; border-top: 1px solid #cccccc; margin: 20px 0;">
-
-<div style="color: #666666; font-size: 10pt;">
+<div style="margin-top: 20px; padding-top: 15px; border-top: 1px solid #cccccc; color: #666666; font-size: 10pt;">
 <strong>From:</strong> {original_email.sender} &lt;{original_email.sender_email}&gt;<br>
 <strong>Sent:</strong> {original_date}<br>
 <strong>To:</strong> {recipient}<br>
 <strong>Subject:</strong> {original_email.subject}<br>
 <br>
+<div style="color: #333333;">
 {original_body.replace(chr(10), '<br>').replace(chr(13), '')}
 </div>
 </div>"""
@@ -721,15 +696,14 @@ Abu Dhabi, UAE<br>
     def create_draft_reply(self, original_email: 'OutlookEmailData', reply_body: str) -> Dict:
         """Create a proper reply draft with threading and original message context"""
         # Always use manual draft creation to ensure we get the full email thread
-        # The createReply API doesn't include the original message content
+        # The createReply API doesn't include the original message content in the draft
         return self._create_manual_draft_reply(original_email, reply_body)
     
     def _create_reply_draft_via_api(self, original_email: 'OutlookEmailData', reply_body: str) -> Dict:
         """Use Microsoft Graph's createReply endpoint for proper threading"""
         
-        # Clean and format the reply body
-        clean_body = self._clean_email_body(reply_body)
-        formatted_body = self._format_reply_body_with_signature(clean_body)
+        # Convert to proper HTML paragraphs to avoid signature insertion issues
+        formatted_body = self._format_reply_body_with_signature(reply_body)
         
         reply_data = {
             "message": {
@@ -760,7 +734,9 @@ Abu Dhabi, UAE<br>
             subject = f"Re: {subject}"
         
         # Format body with original message threading
+        print(f"📧 Creating manual reply draft with full email thread...")
         formatted_body = self._format_email_body_with_thread(reply_body, original_email)
+        print(f"📧 Thread history included: {len(formatted_body)} characters")
         
         # Get user info for From field
         try:
@@ -799,7 +775,7 @@ Abu Dhabi, UAE<br>
             # Debug: Print draft data being sent
             
             response = self._make_graph_request("/me/messages", method="POST", data=draft_message)
-            print(f"✅ Manual reply draft created: {subject}")
+            print(f"✅ Manual reply draft created with thread history: {subject}")
             return {"success": True, "draft_id": response.get("id"), "subject": subject}
         except Exception as e:
             print(f"❌ Error creating manual reply draft: {e}")
