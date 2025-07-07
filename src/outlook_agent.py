@@ -29,6 +29,9 @@ from typing import List, Dict, Any, Optional, Tuple
 import pickle
 from dataclasses import dataclass, asdict
 import requests
+from concurrent.futures import ThreadPoolExecutor
+from functools import lru_cache
+import hashlib
 
 from dotenv import load_dotenv
 from google.adk.agents.llm_agent import LlmAgent
@@ -47,9 +50,9 @@ SCOPES = [
     'https://graph.microsoft.com/Mail.Read',
     'https://graph.microsoft.com/Mail.Send',
     'https://graph.microsoft.com/Mail.ReadWrite',  # Required for creating drafts
-    'https://graph.microsoft.com/User.Read'
-    # Optional: Uncomment if you want calendar integration
-    # 'https://graph.microsoft.com/Calendars.Read'
+    'https://graph.microsoft.com/User.Read',
+    'https://graph.microsoft.com/Calendars.ReadWrite',  # Calendar integration enabled
+    'https://graph.microsoft.com/Calendars.Read'
 ]
 
 @dataclass
@@ -79,6 +82,8 @@ class OutlookEmailData:
     event_key: Optional[str] = None  # For duplicate detection
     is_duplicate: bool = False
     conversation_id: Optional[str] = None  # For email threading
+    created_calendar_event_id: Optional[str] = None  # Track created calendar events
+    calendar_event_status: str = "none"  # none, created, duplicate, failed
 
     def __post_init__(self):
         if self.context_tags is None:
@@ -147,25 +152,41 @@ class OutlookService:
         self.access_token = None
         self.app = None
         
-    def authenticate_interactive(self):
+    def authenticate_interactive(self, force_fresh=False):
         """Interactive authentication for desktop apps"""
         self.app = msal.PublicClientApplication(
             client_id=self.client_id,
             authority=f"https://login.microsoftonline.com/{self.tenant_id}"
         )
         
-        # Try to get token from cache first
-        accounts = self.app.get_accounts()
-        if accounts:
-            result = self.app.acquire_token_silent(SCOPES, account=accounts[0])
-            if result and "access_token" in result:
-                self.access_token = result["access_token"]
-                print("✅ Using cached authentication token")
-                return
+        if not force_fresh:
+            # Try to get token from cache first
+            accounts = self.app.get_accounts()
+            if accounts:
+                result = self.app.acquire_token_silent(SCOPES, account=accounts[0])
+                if result and "access_token" in result:
+                    self.access_token = result["access_token"]
+                    print("✅ Using cached authentication token")
+                    return
+        else:
+            # Clear all cached accounts to force fresh login
+            print("🔐 Clearing cached credentials for fresh login...")
+            accounts = self.app.get_accounts()
+            for account in accounts:
+                self.app.remove_account(account)
+            print("🔐 Forcing fresh authentication for new user login...")
         
         # Interactive login
         print("🔐 Opening browser for Microsoft login...")
-        result = self.app.acquire_token_interactive(scopes=SCOPES)
+        
+        # Configure login parameters based on whether fresh login is forced
+        login_params = {"scopes": SCOPES}
+        if force_fresh:
+            # Force account selection and disable pre-selected accounts
+            login_params["prompt"] = "select_account"  # Force account selection
+            login_params["login_hint"] = ""  # Clear any login hints
+        
+        result = self.app.acquire_token_interactive(**login_params)
         if "access_token" in result:
             self.access_token = result["access_token"]
             print("✅ Authentication successful!")
@@ -192,7 +213,7 @@ class OutlookService:
             error_msg = result.get('error_description', result.get('error', 'Unknown error'))
             raise Exception(f"Service authentication failed: {error_msg}")
     
-    def authenticate_web_oauth(self):
+    def authenticate_web_oauth(self, force_fresh=False):
         """Web-based OAuth for serverless environments like Hugging Face Spaces"""
         import streamlit as st
         import urllib.parse
@@ -206,14 +227,32 @@ class OutlookService:
         if 'access_token' not in st.session_state:
             st.session_state.access_token = None
         
-        # Check if we already have a token
-        if st.session_state.access_token:
-            self.access_token = st.session_state.access_token
-            print("✅ Using cached OAuth token")
-            return
+        if force_fresh:
+            # Clear ALL cached tokens and session state to allow different users
+            st.session_state.access_token = None
+            st.session_state.oauth_state = None
+            # Clear query parameters to force fresh auth flow
+            if hasattr(st, 'query_params'):
+                try:
+                    st.query_params.clear()
+                except:
+                    pass
+            print("🔐 Forcing fresh OAuth authentication for new user login...")
+        else:
+            # Check if we already have a token
+            if st.session_state.access_token:
+                self.access_token = st.session_state.access_token
+                print("✅ Using cached OAuth token")
+                return
         
         # Check for authorization code in URL parameters
-        query_params = st.query_params
+        try:
+            query_params = st.query_params
+        except Exception as e:
+            # Safari sometimes has issues with query_params
+            st.error(f"🦷 Browser compatibility issue: {e}")
+            st.info("**Safari Users**: This appears to be a Safari-specific issue. Please try Chrome or Firefox.")
+            return
         
         if 'code' in query_params and 'state' in query_params:
             # We got the authorization code back from Microsoft
@@ -243,13 +282,17 @@ class OutlookService:
         redirect_uri = self._get_redirect_uri()
         
         # Create authorization URL
-        auth_url = self._generate_auth_url(st.session_state.oauth_state)
+        auth_url = self._generate_auth_url(st.session_state.oauth_state, force_fresh)
         
         st.warning("🔐 Authentication Required")
         
         # Show redirect URI configuration info
         with st.expander("⚙️ Configuration Info", expanded=False):
-            st.info(f"**Redirect URI:** `{redirect_uri}`")
+            st.info(f"**Detected Redirect URI:** `{redirect_uri}`")
+            
+            # Show additional network access information
+            self._display_network_access_info(redirect_uri)
+            
             st.markdown("""
             **Important:** Make sure this redirect URI is added to your Azure AD app registration:
             1. Go to [Azure Portal](https://portal.azure.com)
@@ -269,16 +312,34 @@ class OutlookService:
         4. You'll be redirected back here automatically
         """)
         
+        # Safari-specific warning
+        st.warning("""
+        🦷 **Safari Users**: If authentication gets stuck or fails:
+        - Disable "Prevent Cross-Site Tracking" in Safari → Preferences → Privacy
+        - Ensure "Block all cookies" is NOT enabled
+        - Or use Chrome/Firefox for better compatibility
+        - Try the manual authentication option below if the button doesn't work
+        """)
+        
         if st.button("🔐 Authenticate with Microsoft", type="primary"):
             st.markdown(f'<meta http-equiv="refresh" content="0; url={auth_url}">', unsafe_allow_html=True)
             st.markdown(f"If not redirected automatically, [click here]({auth_url})")
         
         # Show manual option
-        with st.expander("Manual Authentication (if button doesn't work)"):
+        with st.expander("🛠️ Manual Authentication (Safari/Fallback Method)"):
+            st.markdown("**If the button above doesn't work (common in Safari):**")
             st.code(auth_url)
-            st.markdown("Copy this URL and open it in your browser")
+            st.markdown("""
+            **Instructions:**
+            1. Copy the URL above
+            2. Open it in a new tab/window
+            3. Complete Microsoft authentication
+            4. After successful login, return to this page and refresh it
+            
+            **Safari Users**: This manual method often works better than the automatic redirect.
+            """)
     
-    def _generate_auth_url(self, state: str) -> str:
+    def _generate_auth_url(self, state: str, force_fresh: bool = False) -> str:
         """Generate Microsoft OAuth authorization URL"""
         import urllib.parse
         import streamlit as st
@@ -296,6 +357,10 @@ class OutlookService:
             'response_mode': 'query'
         }
         
+        # Add prompt=select_account when force_fresh is True to show account selection screen
+        if force_fresh:
+            params['prompt'] = 'select_account'
+        
         auth_url = f"https://login.microsoftonline.com/{self.tenant_id}/oauth2/v2.0/authorize"
         return f"{auth_url}?{urllib.parse.urlencode(params)}"
     
@@ -303,6 +368,7 @@ class OutlookService:
         """Auto-detect or configure redirect URI based on environment"""
         import streamlit as st
         import os
+        import socket
         
         # Check for environment variable first (most reliable)
         if os.getenv('REDIRECT_URI'):
@@ -319,8 +385,125 @@ class OutlookService:
                 st.error(f"❌ Cannot auto-detect redirect URI. Please set REDIRECT_URI environment variable to your Hugging Face Space URL")
                 return "https://your-space-url.hf.space"
         
-        # Local development fallback
-        return "http://localhost:8501"
+        # Local development - auto-detect host and port
+        return self._detect_local_redirect_uri()
+    
+    def _detect_local_redirect_uri(self) -> str:
+        """Detect the actual redirect URI for local Streamlit development"""
+        import streamlit as st
+        import socket
+        import os
+        
+        # Try to get the actual host and port from Streamlit config
+        try:
+            # Get server address from Streamlit config
+            server_address = st.config.get_option('server.address')
+            server_port = st.config.get_option('server.port')
+            
+            # If server address is not set or is 0.0.0.0, try to detect actual host
+            if not server_address or server_address in ['0.0.0.0', '']:
+                # Try to detect if we're running on a network interface
+                hostname = socket.gethostname()
+                try:
+                    # Get the local IP address
+                    local_ip = socket.gethostbyname(hostname)
+                    
+                    # Check if we can connect to the Streamlit port on this IP
+                    # This helps determine if Streamlit is bound to network interfaces
+                    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    sock.settimeout(1)
+                    result = sock.connect_ex((local_ip, server_port))
+                    sock.close()
+                    
+                    if result == 0:
+                        # Streamlit is accessible on network IP
+                        redirect_uri = f"http://{local_ip}:{server_port}"
+                        print(f"🌐 Detected network-accessible Streamlit at: {redirect_uri}")
+                        return redirect_uri
+                    else:
+                        # Fall back to localhost
+                        redirect_uri = f"http://localhost:{server_port}"
+                        print(f"🏠 Using localhost redirect URI: {redirect_uri}")
+                        return redirect_uri
+                        
+                except (socket.gaierror, socket.error):
+                    # If network detection fails, use localhost
+                    redirect_uri = f"http://localhost:{server_port}"
+                    print(f"🏠 Network detection failed, using localhost: {redirect_uri}")
+                    return redirect_uri
+            else:
+                # Use the configured server address
+                redirect_uri = f"http://{server_address}:{server_port}"
+                print(f"⚙️ Using configured server address: {redirect_uri}")
+                return redirect_uri
+                
+        except Exception as e:
+            print(f"⚠️ Error detecting Streamlit config: {e}")
+            
+            # Fallback: Try to detect from environment variables or use default
+            port = os.getenv('STREAMLIT_SERVER_PORT', '8501')
+            host = os.getenv('STREAMLIT_SERVER_ADDRESS', 'localhost')
+            
+            # If host is 0.0.0.0, try to get actual IP
+            if host == '0.0.0.0':
+                try:
+                    hostname = socket.gethostname()
+                    local_ip = socket.gethostbyname(hostname)
+                    redirect_uri = f"http://{local_ip}:{port}"
+                    print(f"🌐 Using detected local IP: {redirect_uri}")
+                    return redirect_uri
+                except:
+                    redirect_uri = f"http://localhost:{port}"
+                    print(f"🏠 IP detection failed, using localhost: {redirect_uri}")
+                    return redirect_uri
+            else:
+                redirect_uri = f"http://{host}:{port}"
+                print(f"📍 Using environment config: {redirect_uri}")
+                return redirect_uri
+    
+    def _display_network_access_info(self, redirect_uri: str) -> None:
+        """Display helpful network access information to users"""
+        import streamlit as st
+        import socket
+        import re
+        
+        # Check if the redirect URI uses a network IP (not localhost)
+        ip_pattern = r'http://(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}):(\d+)'
+        ip_match = re.match(ip_pattern, redirect_uri)
+        
+        if ip_match:
+            ip_address = ip_match.group(1)
+            port = ip_match.group(2)
+            
+            st.success(f"🌐 **Network Access Detected**")
+            st.info(f"""
+            **Local Network Access Available:**
+            - You can access this app from other devices on your network
+            - Network IP: `{ip_address}:{port}`
+            - This redirect URI works for both localhost and network access
+            
+            **For Network Access:**
+            - Other devices can visit: `http://{ip_address}:{port}`
+            - Make sure your firewall allows connections on port {port}
+            """)
+        elif 'localhost' in redirect_uri:
+            st.info(f"""
+            **Localhost Access Only:**
+            - Current redirect URI: `{redirect_uri}`
+            - This only works when accessing from the same machine
+            
+            **To Enable Network Access:**
+            1. Run Streamlit with: `streamlit run app.py --server.address 0.0.0.0`
+            2. Or set environment variable: `STREAMLIT_SERVER_ADDRESS=0.0.0.0`
+            3. The app will then auto-detect your network IP
+            """)
+        
+        # Show additional configuration options
+        st.markdown("""
+        **Manual Configuration Options:**
+        - Set `REDIRECT_URI` environment variable to override auto-detection
+        - Example: `REDIRECT_URI=http://192.168.1.100:8501`
+        """)
     
     def _exchange_code_for_token(self, auth_code: str) -> str:
         """Exchange authorization code for access token"""
@@ -346,7 +529,7 @@ class OutlookService:
         else:
             raise Exception(f"Token exchange failed: {response.text}")
     
-    def authenticate(self):
+    def authenticate(self, force_fresh=False):
         """Smart authentication - detect environment and use appropriate method"""
         # Check if running in serverless environment (like Hugging Face Spaces)
         import os
@@ -354,11 +537,11 @@ class OutlookService:
         
         if is_serverless:
             print("🌐 Detected serverless environment - using web-based OAuth")
-            return self.authenticate_web_oauth()
+            return self.authenticate_web_oauth(force_fresh=force_fresh)
         else:
             try:
                 # Local environment - use interactive auth
-                self.authenticate_interactive()
+                self.authenticate_interactive(force_fresh=force_fresh)
             except Exception as e:
                 print(f"⚠️ Interactive auth failed: {e}")
                 if self.client_secret:
@@ -388,10 +571,15 @@ class OutlookService:
                 response = requests.get(url, headers=headers)
             elif method == "POST":
                 response = requests.post(url, headers=headers, json=data)
+            elif method == "PATCH":
+                response = requests.patch(url, headers=headers, json=data)
             else:
                 raise Exception(f"Unsupported method: {method}")
             
             response.raise_for_status()
+            # Some API calls return empty response (204 No Content)
+            if response.status_code == 204 or not response.content:
+                return {}
             return response.json()
         except requests.exceptions.RequestException as e:
             raise Exception(f"Graph API request failed: {e}")
@@ -817,10 +1005,10 @@ class OutlookService:
             print(f"Error marking email as read: {e}")
             return False
     
-    def get_calendar_events(self, hours_ahead: int = 48) -> List[Dict]:
-        """Get upcoming calendar events (requires Calendars.Read permission)"""
+    def get_calendar_events(self, hours_ahead: int = 48, hours_back: int = 24) -> List[Dict]:
+        """Get calendar events within a time range (requires Calendars.Read permission)"""
         try:
-            start_time = datetime.now().strftime('%Y-%m-%dT%H:%M:%S.000Z')
+            start_time = (datetime.now() - timedelta(hours=hours_back)).strftime('%Y-%m-%dT%H:%M:%S.000Z')
             end_time = (datetime.now() + timedelta(hours=hours_ahead)).strftime('%Y-%m-%dT%H:%M:%S.000Z')
             
             endpoint = f"/me/calendar/events?$filter=start/dateTime ge '{start_time}' and start/dateTime le '{end_time}'"
@@ -829,11 +1017,437 @@ class OutlookService:
         except Exception as e:
             print(f"Error fetching calendar events: {e}")
             return []
+    
+    def check_event_exists(self, subject: str, start_time: str, location: str = "") -> Dict:
+        """Check if a similar calendar event already exists"""
+        try:
+            print(f"🔍 Checking for duplicate events...")
+            print(f"   Target: '{subject}' at {start_time}")
+            
+            # Get events for a wider window (1 week back, 2 weeks ahead)
+            existing_events = self.get_calendar_events(hours_ahead=336, hours_back=168)  # 2 weeks ahead, 1 week back
+            print(f"   Found {len(existing_events)} existing events in calendar")
+            
+            # Parse the target start time for comparison
+            from datetime import datetime
+            import pytz
+            
+            # Ensure target_start is timezone-aware
+            if start_time.endswith('Z'):
+                target_start = datetime.fromisoformat(start_time.replace('Z', '+00:00'))
+            elif '+' in start_time or start_time.endswith('00:00'):
+                target_start = datetime.fromisoformat(start_time)
+            else:
+                # If no timezone info, assume UTC
+                target_start = datetime.fromisoformat(start_time).replace(tzinfo=pytz.UTC)
+            
+            print(f"   Target datetime: {target_start}")
+            
+            # Check for similar events
+            for i, event in enumerate(existing_events):
+                event_subject = event.get('subject', '').lower()
+                event_start_str = event.get('start', {}).get('dateTime', '')
+                event_location = event.get('location', {}).get('displayName', '').lower()
+                
+                print(f"   Event {i+1}: '{event.get('subject', '')}' at {event_start_str}")
+                
+                if not event_start_str:
+                    print(f"      ❌ Skipping - no start time")
+                    continue
+                
+                try:
+                    # Parse event start time - ensure it's timezone-aware
+                    if event_start_str.endswith('Z'):
+                        event_start = datetime.fromisoformat(event_start_str.replace('Z', '+00:00'))
+                    elif '+' in event_start_str or event_start_str.endswith('00:00'):
+                        event_start = datetime.fromisoformat(event_start_str)
+                    else:
+                        # If no timezone info, assume UTC
+                        event_start = datetime.fromisoformat(event_start_str).replace(tzinfo=pytz.UTC)
+                    
+                    # Check for duplicates based on:
+                    # 1. Similar subject (better matching for long academic titles)
+                    # 2. Same or very close time (within 2 hours)
+                    # 3. Similar location (if provided)
+                    
+                    # Improved subject matching for academic/research events
+                    subject_clean = subject.lower().replace('[personal]', '').replace('meeting:', '').strip()
+                    event_subject_clean = event_subject.replace('[personal]', '').replace('meeting:', '').strip()
+                    
+                    print(f"      Comparing:")
+                    print(f"        Target: '{subject_clean}'")
+                    print(f"        Existing: '{event_subject_clean}'")
+                    
+                    # Check for significant overlap in subject (at least 3 words or 50% overlap)
+                    subject_words = set(subject_clean.split())
+                    event_subject_words = set(event_subject_clean.split())
+                    overlap_count = len(subject_words.intersection(event_subject_words))
+                    overlap_ratio = overlap_count / max(len(subject_words), len(event_subject_words)) if subject_words and event_subject_words else 0
+                    
+                    print(f"        Word overlap: {overlap_count} words, {overlap_ratio:.2f} ratio")
+                    
+                    # Multiple matching strategies
+                    # Strategy 1: Exact or near-exact subject match
+                    exact_match = subject_clean == event_subject_clean
+                    contains_match = subject_clean in event_subject_clean or event_subject_clean in subject_clean
+                    
+                    # Strategy 2: Word overlap (more lenient threshold)
+                    word_overlap_match = overlap_count >= 2 or overlap_ratio >= 0.3
+                    
+                    # Strategy 3: Key phrase matching for research talks
+                    key_phrases = ['research talk', 'seminar', 'lecture', 'conference', 'workshop']
+                    key_phrase_match = False
+                    for phrase in key_phrases:
+                        if phrase in subject_clean and phrase in event_subject_clean:
+                            # Same type of event, check for author/speaker overlap
+                            subject_words_filtered = [w for w in subject_words if len(w) > 2]  # Filter short words
+                            event_words_filtered = [w for w in event_subject_words if len(w) > 2]
+                            important_overlap = len(set(subject_words_filtered).intersection(set(event_words_filtered))) >= 2
+                            if important_overlap:
+                                key_phrase_match = True
+                                break
+                    
+                    subject_overlap = exact_match or contains_match or word_overlap_match or key_phrase_match
+                    
+                    print(f"        Exact: {exact_match}, Contains: {contains_match}, Word overlap: {word_overlap_match}, Key phrase: {key_phrase_match}")
+                    print(f"        Final subject match: {subject_overlap}")
+                    
+                    time_diff = abs((target_start - event_start).total_seconds())
+                    
+                    # More lenient time matching for duplicate detection
+                    is_same_day = target_start.date() == event_start.date()
+                    is_similar_time = time_diff < 7200  # Within 2 hours
+                    is_very_close_time = time_diff < 3600  # Within 1 hour
+                    
+                    # For research talks/seminars, same day might be enough if subject matches well
+                    time_match = is_similar_time
+                    if exact_match or contains_match:
+                        time_match = is_same_day  # If exact subject match, same day is enough
+                    elif key_phrase_match:
+                        time_match = is_very_close_time  # For research talks, be more strict on time
+                    
+                    print(f"        Time diff: {time_diff:.0f} seconds ({time_diff/3600:.1f} hours)")
+                    print(f"        Same day: {is_same_day}, Similar time: {is_similar_time}, Final time match: {time_match}")
+                    
+                    location_match = True  # Default to True if no location specified
+                    if location and event_location:
+                        location_match = location.lower() in event_location or event_location in location.lower()
+                    
+                    if subject_overlap and time_match and location_match:
+                        print(f"      ✅ DUPLICATE FOUND!")
+                        return {
+                            "exists": True,
+                            "event_id": event.get('id'),
+                            "event_subject": event.get('subject'),
+                            "event_start": event_start_str,
+                            "event_location": event_location,
+                            "message": f"Similar event already exists: '{event.get('subject')}' at {event_start_str}"
+                        }
+                    else:
+                        print(f"      ❌ Not a match")
+                
+                except Exception as e:
+                    print(f"      ❌ Error parsing event: {e}")
+                    continue
+            
+            return {"exists": False, "message": "No similar event found"}
+            
+        except Exception as e:
+            print(f"Error checking for existing events: {e}")
+            return {"exists": False, "error": str(e), "message": "Could not check for duplicates"}
+    
+    def create_calendar_event(self, subject: str, start_time: str, end_time: str, 
+                            description: str = "", location: str = "", attendees: List[str] = None) -> Dict:
+        """Create a calendar event with duplicate checking (requires Calendars.ReadWrite permission)"""
+        try:
+            # First, check if similar event already exists
+            duplicate_check = self.check_event_exists(subject, start_time, location)
+            
+            if duplicate_check.get("exists"):
+                return {
+                    "success": False,
+                    "duplicate": True,
+                    "existing_event_id": duplicate_check.get("event_id"),
+                    "existing_event_subject": duplicate_check.get("event_subject"),
+                    "existing_event_start": duplicate_check.get("event_start"),
+                    "message": f"⚠️ Duplicate event not created: {duplicate_check.get('message')}"
+                }
+            
+            # For testing: Only create events for yourself, don't invite others
+            # attendees parameter is ignored for now - no invitations sent
+            attendee_list = []
+            
+            # Create event payload
+            event_data = {
+                "subject": subject,
+                "body": {
+                    "contentType": "HTML",
+                    "content": description
+                },
+                "start": {
+                    "dateTime": start_time,
+                    "timeZone": "UTC"
+                },
+                "end": {
+                    "dateTime": end_time,
+                    "timeZone": "UTC"
+                },
+                "location": {
+                    "displayName": location
+                },
+                "attendees": attendee_list
+            }
+            
+            result = self._make_graph_request("/me/events", method="POST", data=event_data)
+            return {
+                "success": True,
+                "duplicate": False,
+                "event_id": result.get('id'),
+                "webLink": result.get('webLink'),
+                "message": f"✅ Calendar event '{subject}' created successfully"
+            }
+            
+        except Exception as e:
+            print(f"❌ Error creating calendar event: {e}")
+            return {
+                "success": False,
+                "duplicate": False,
+                "error": str(e),
+                "message": f"Failed to create calendar event: {str(e)}"
+            }
+    
+    def create_meeting_from_email(self, email: 'OutlookEmailData', event_details: Dict) -> Dict:
+        """Create a personal calendar event from email meeting details (testing mode - no invitations sent)"""
+        try:
+            subject = event_details.get('subject', f"Meeting: {email.subject}")
+            start_time = event_details.get('start_time')
+            end_time = event_details.get('end_time') 
+            location = event_details.get('location', '')
+            
+            # Enhanced description with meeting details for your reference
+            description = f"""📧 Meeting created from email: {email.subject}
+            
+👤 Original organizer: {email.sender} ({email.sender_email})
+📅 Auto-created for personal calendar tracking
+
+📝 Original email details:
+{event_details.get('description', '')}
+
+⚠️ Note: This is a personal calendar entry only. No invitations have been sent to other attendees.
+If you want to invite others, please review and send invitations manually from your calendar."""
+            
+            # TESTING MODE: No attendees added, only personal calendar entry
+            # attendees = [email.sender_email]  # Commented out for testing
+            attendees = []  # Empty - only for your calendar
+            
+            return self.create_calendar_event(
+                subject=f"[PERSONAL] {subject}",  # Mark as personal calendar entry
+                start_time=start_time,
+                end_time=end_time,
+                description=description,
+                location=location,
+                attendees=attendees  # Empty list - no invitations sent
+            )
+            
+        except Exception as e:
+            print(f"❌ Error creating meeting from email: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "message": f"Failed to create meeting from email: {str(e)}"
+            }
+    
+    def prepare_invitation_for_review(self, email: 'OutlookEmailData', event_details: Dict, user_email: str) -> Dict:
+        """Prepare meeting invitation for human review before sending (Future feature)"""
+        # TODO: Implement invitation review system
+        # This will be used when user wants to send invitations to others
+        # Features to implement:
+        # 1. Create draft invitation with attendee list
+        # 2. Allow user to review and modify before sending
+        # 3. Ensure user is set as organizer
+        # 4. Preview invitation content
+        # 5. Send only after user approval
+        
+        invitation_draft = {
+            "organizer": user_email,
+            "subject": event_details.get('subject'),
+            "attendees": event_details.get('attendees', []),
+            "start_time": event_details.get('start_time'),
+            "end_time": event_details.get('end_time'),
+            "location": event_details.get('location'),
+            "description": event_details.get('description'),
+            "status": "draft_pending_review",
+            "original_email_id": email.id
+        }
+        
+        return {
+            "success": True,
+            "invitation_draft": invitation_draft,
+            "message": "Invitation prepared for review. Use review_and_send_invitation() to finalize."
+        }
+    
+    def get_folder_id(self, folder_name: str) -> str:
+        """Get folder ID by name"""
+        try:
+            # Get all mail folders
+            result = self._make_graph_request("/me/mailFolders")
+            folders = result.get('value', [])
+            
+            # Look for the folder by name
+            for folder in folders:
+                if folder.get('displayName', '').lower() == folder_name.lower():
+                    return folder.get('id')
+            
+            # If not found, try searching child folders
+            for folder in folders:
+                if folder.get('childFolderCount', 0) > 0:
+                    folder_id = folder.get('id')
+                    child_result = self._make_graph_request(f"/me/mailFolders/{folder_id}/childFolders")
+                    child_folders = child_result.get('value', [])
+                    
+                    for child_folder in child_folders:
+                        if child_folder.get('displayName', '').lower() == folder_name.lower():
+                            return child_folder.get('id')
+            
+            return None
+            
+        except Exception as e:
+            print(f"❌ Error getting folder ID for '{folder_name}': {e}")
+            return None
+    
+    def move_email(self, email_id: str, destination_folder_id: str) -> bool:
+        """Move email to specified folder"""
+        try:
+            data = {
+                "destinationId": destination_folder_id
+            }
+            
+            result = self._make_graph_request(f"/me/messages/{email_id}/move", method="POST", data=data)
+            return result is not None
+            
+        except Exception as e:
+            print(f"❌ Error moving email {email_id}: {e}")
+            return False
+    
+    def add_category_to_email(self, email_id: str, category_name: str) -> bool:
+        """Add category to email"""
+        try:
+            # First get current categories
+            current_email = self._make_graph_request(f"/me/messages/{email_id}")
+            current_categories = current_email.get('categories', [])
+            
+            # Add new category if not already present
+            if category_name not in current_categories:
+                current_categories.append(category_name)
+                
+                # Update email with new categories
+                data = {
+                    "categories": current_categories
+                }
+                
+                result = self._make_graph_request(f"/me/messages/{email_id}", method="PATCH", data=data)
+                return result is not None
+            
+            return True  # Category already exists
+            
+        except Exception as e:
+            print(f"❌ Error adding category to email {email_id}: {e}")
+            return False
+    
+    def flag_email(self, email_id: str) -> bool:
+        """Flag email for follow-up"""
+        try:
+            data = {
+                "flag": {
+                    "flagStatus": "flagged"
+                }
+            }
+            
+            result = self._make_graph_request(f"/me/messages/{email_id}", method="PATCH", data=data)
+            return result is not None
+            
+        except Exception as e:
+            print(f"❌ Error flagging email {email_id}: {e}")
+            return False
+    
+    def send_reply(self, email_id: str, reply_body: str) -> bool:
+        """Send reply to email"""
+        try:
+            data = {
+                "message": {
+                    "body": {
+                        "contentType": "HTML",
+                        "content": reply_body
+                    }
+                }
+            }
+            
+            result = self._make_graph_request(f"/me/messages/{email_id}/reply", method="POST", data=data)
+            return result is not None
+            
+        except Exception as e:
+            print(f"❌ Error sending reply to email {email_id}: {e}")
+            return False
 
 # ─────────────────────────── Priority Scoring ──
 
 class OutlookEmailPrioritizer:
     """Advanced deadline-aware email prioritization for Outlook"""
+    
+    def __init__(self):
+        # Cache for repeated analyses
+        self._analysis_cache = {}
+        self._text_cache = {}
+        
+        # Precompile regex patterns for performance
+        self._compiled_patterns = None
+        self._init_patterns()
+    
+    def _init_patterns(self):
+        """Initialize and compile regex patterns for better performance"""
+        if self._compiled_patterns is None:
+            self._compiled_patterns = [
+                re.compile(pattern, re.IGNORECASE) for pattern in self.DATE_PATTERNS
+            ]
+    
+    @lru_cache(maxsize=1000)
+    def _get_text_hash(self, text: str) -> str:
+        """Generate hash for text caching"""
+        return hashlib.md5(text.encode()).hexdigest()
+    
+    def batch_score_emails(self, emails: List[OutlookEmailData], current_user_email: str = "") -> List[OutlookEmailData]:
+        """Batch process emails for better performance"""
+        # Process emails in parallel using ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            futures = []
+            for email in emails:
+                future = executor.submit(self._score_email_cached, email, current_user_email)
+                futures.append((email, future))
+            
+            # Collect results
+            for email, future in futures:
+                try:
+                    email.priority_score = future.result()
+                    email.urgency_level = self.categorize_urgency(email.priority_score, email)
+                except Exception as e:
+                    print(f"Error processing email {email.id}: {e}")
+                    email.priority_score = 50.0  # Default score
+                    email.urgency_level = "normal"
+        
+        return emails
+    
+    def _score_email_cached(self, email: OutlookEmailData, current_user_email: str = "") -> float:
+        """Cached version of email scoring"""
+        # Create cache key from email content
+        text_content = (email.subject + " " + email.body + " " + email.body_preview).lower()
+        cache_key = self._get_text_hash(text_content + str(email.date) + current_user_email)
+        
+        if cache_key in self._analysis_cache:
+            return self._analysis_cache[cache_key]
+        
+        score = self.score_email(email, current_user_email)
+        self._analysis_cache[cache_key] = score
+        return score
     
     # Comprehensive urgency and deadline keywords from research
     URGENT_KEYWORDS = [
@@ -913,7 +1527,8 @@ class OutlookEmailPrioritizer:
         """Extract deadline from email content with confidence score"""
         text = (email.subject + " " + email.body + " " + email.body_preview).lower()
         
-        # Check for deadline keywords first
+        # Check for deadline keywords first (optimized with set lookup)
+        text_words = set(text.split())
         has_deadline_keywords = any(keyword in text for keyword in self.DEADLINE_KEYWORDS)
         has_action_keywords = any(keyword in text for keyword in self.ACTION_KEYWORDS)
         
@@ -923,9 +1538,9 @@ class OutlookEmailPrioritizer:
         confidence = 0.0
         best_deadline = None
         
-        # Try to extract specific dates
-        for pattern in self.DATE_PATTERNS:
-            matches = re.findall(pattern, text, re.IGNORECASE)
+        # Try to extract specific dates using compiled patterns
+        for pattern in self._compiled_patterns:
+            matches = pattern.findall(text)
             for match in matches:
                 try:
                     deadline_date = self._parse_date_string(match)
@@ -933,7 +1548,8 @@ class OutlookEmailPrioritizer:
                         confidence = max(confidence, 0.8)
                         if not best_deadline or deadline_date < best_deadline:
                             best_deadline = deadline_date
-                except:
+                except (ValueError, TypeError) as e:
+                    print(f"Date parsing error for '{match}': {e}")
                     continue
         
         # If no specific date found, assign relative confidence based on keywords
@@ -1075,7 +1691,7 @@ class OutlookEmailPrioritizer:
         for fmt in date_formats:
             try:
                 return datetime.strptime(date_str.strip(), fmt)
-            except:
+            except (ValueError, TypeError):
                 continue
         
         return None
@@ -1323,10 +1939,8 @@ async def build_outlook_reader_agent() -> LlmAgent:
             emails = outlook.get_recent_emails(max_results=15)
             prioritizer = OutlookEmailPrioritizer()
             
-            # Score emails
-            for email in emails:
-                email.priority_score = prioritizer.score_email(email, current_user_email)
-                email.urgency_level = prioritizer.categorize_urgency(email.priority_score, email)
+            # Batch score emails for better performance
+            emails = prioritizer.batch_score_emails(emails, current_user_email)
             
             # Detect and mark duplicates
             prioritizer.detect_duplicates(emails)
@@ -1585,9 +2199,10 @@ def interactive_outlook_mode():
                 print("🔄 Fetching Outlook emails...")
                 emails = outlook.get_recent_emails(max_results=10)
                 
-                for email in emails:
-                    email.priority_score = prioritizer.score_email(email)
-                    email.urgency_level = prioritizer.categorize_urgency(email.priority_score, email)
+                # Use batch processing for better performance
+                user_info = outlook.get_user_info()
+                current_user_email = user_info.get('email', '')
+                emails = prioritizer.batch_score_emails(emails, current_user_email)
                 
                 emails.sort(key=lambda e: e.priority_score, reverse=True)
                 
