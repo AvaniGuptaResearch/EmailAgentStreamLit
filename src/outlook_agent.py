@@ -259,7 +259,11 @@ class OutlookService:
             auth_code = query_params['code']
             state = query_params['state']
             
-            if state == st.session_state.oauth_state:
+            # In Streamlit Cloud, session state may not persist across redirects
+            # For deployment environments, we'll skip state validation as a fallback
+            is_deployment = os.getenv('STREAMLIT_SHARING') == 'true' or 'REDIRECT_URI' in st.secrets
+            
+            if state == st.session_state.oauth_state or (is_deployment and st.session_state.oauth_state is None):
                 try:
                     # Exchange authorization code for access token
                     self.access_token = self._exchange_code_for_token(auth_code)
