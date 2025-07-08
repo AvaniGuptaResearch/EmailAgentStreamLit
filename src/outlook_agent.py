@@ -374,6 +374,13 @@ class OutlookService:
         if os.getenv('REDIRECT_URI'):
             return os.getenv('REDIRECT_URI')
         
+        # Check Streamlit secrets
+        try:
+            if 'REDIRECT_URI' in st.secrets:
+                return st.secrets['REDIRECT_URI']
+        except:
+            pass
+        
         # Try to auto-detect from Hugging Face environment
         space_id = os.getenv('SPACE_ID') or os.getenv('HF_SPACE_ID')
         if space_id:
