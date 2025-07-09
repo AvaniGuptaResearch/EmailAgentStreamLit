@@ -4,7 +4,9 @@
       "Bash(grep:*)",
       "Bash(find:*)",
       "Bash(mkdir:*)",
-      "Bash(rg:*)"
+      "Bash(rg:*)",
+      "Bash(python:*)",
+      "Bash(streamlit run:*)"
     ],
     "deny": []
   }
