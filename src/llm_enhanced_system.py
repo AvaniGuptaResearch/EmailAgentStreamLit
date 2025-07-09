@@ -122,10 +122,27 @@ class SentimentAnalysis:
 class OllamaLLMService:
     """Service for interacting with Ollama LLM"""
     
-    def __init__(self, model: str = "mistral", host: str = "http://localhost:11434"):
+    def __init__(self, model: str = "mistral", host: str = None):
         self.model = model
-        self.host = host
-        self.url = f"{host}/api/generate"
+        # Check for cloud deployment and use environment variable
+        import os
+        import streamlit as st
+        
+        if host:
+            self.host = host
+        elif os.getenv('OLLAMA_HOST'):
+            self.host = os.getenv('OLLAMA_HOST')
+        else:
+            # Try Streamlit secrets for cloud deployment
+            try:
+                if 'OLLAMA_HOST' in st.secrets:
+                    self.host = st.secrets['OLLAMA_HOST']
+                else:
+                    self.host = "http://localhost:11434"
+            except:
+                self.host = "http://localhost:11434"
+        
+        self.url = f"{self.host}/api/generate"
         self._response_cache = {}  # Cache for LLM responses
         self._test_connection()
     
@@ -1476,9 +1493,9 @@ CRITICAL REQUIREMENTS:
 class LLMEnhancedEmailSystem:
     """Complete email system using LLM for analysis and drafting"""
     
-    def __init__(self, ollama_model: str = "mistral"):
+    def __init__(self, ollama_model: str = "mistral", ollama_url: str = None):
         # Initialize services
-        self.llm = OllamaLLMService(model=ollama_model)
+        self.llm = OllamaLLMService(model=ollama_model, host=ollama_url)
         self.analyzer = LLMEmailAnalyzer(self.llm)
         self.drafter = LLMResponseDrafter(self.llm)
         

@@ -39,6 +39,8 @@ if 'llm_system' not in st.session_state:
     st.session_state.llm_system = None
 if 'output' not in st.session_state:
     st.session_state.output = ""
+if 'ollama_url' not in st.session_state:
+    st.session_state.ollama_url = "http://localhost:11434"
 
 def initialize_system(force_fresh=False):
     """Initialize the system and authenticate"""
@@ -57,7 +59,7 @@ def initialize_system(force_fresh=False):
         """, unsafe_allow_html=True)
         
         with st.spinner("🔧 Initializing and authenticating..."):
-            st.session_state.llm_system = LLMEnhancedEmailSystem(ollama_model="mistral")
+            st.session_state.llm_system = LLMEnhancedEmailSystem(ollama_model="mistral", ollama_url=st.session_state.ollama_url)
             # Trigger authentication during initialization
             st.session_state.llm_system.outlook.authenticate(force_fresh=force_fresh)
         
@@ -141,6 +143,55 @@ def main():
     
     # Single column layout to fix the dual-text issue
     st.subheader("Controls")
+    
+    # Ollama URL configuration
+    st.subheader("🤖 Ollama Configuration")
+    
+    with st.expander("ℹ️ Ollama Setup Instructions", expanded=False):
+        st.markdown("""
+        **Setup your local Ollama:**
+        1. Install Ollama: `curl -fsSL https://ollama.com/install.sh | sh`
+        2. Start Ollama server: `ollama serve`
+        3. Pull a model: `ollama pull mistral`
+        4. Your Ollama will be available at `http://localhost:11434`
+        
+        **For remote/cloud Ollama:**
+        - Make sure your Ollama server is accessible from the internet
+        - Use the full URL with protocol (e.g., `http://your-server:11434`)
+        - Ensure firewall allows connections to port 11434
+        """)
+    
+    ollama_url = st.text_input(
+        "Ollama URL",
+        value=st.session_state.ollama_url,
+        help="Enter your local Ollama server URL (e.g., http://localhost:11434)",
+        key="ollama_url_input"
+    )
+    
+    # Update session state when URL changes
+    if ollama_url != st.session_state.ollama_url:
+        st.session_state.ollama_url = ollama_url
+        # Reset system if URL changed
+        if st.session_state.llm_system:
+            st.session_state.llm_system = None
+            st.info("🔄 URL changed. Please reinitialize the system.")
+    
+    # Test connection button
+    if st.button("🔗 Test Ollama Connection"):
+        try:
+            import requests
+            response = requests.get(f"{st.session_state.ollama_url}/api/tags", timeout=5)
+            if response.status_code == 200:
+                models = response.json().get('models', [])
+                if models:
+                    st.success(f"✅ Connected! Available models: {', '.join([m['name'] for m in models])}")
+                else:
+                    st.warning("⚠️ Connected but no models found. Run 'ollama pull mistral' first.")
+            else:
+                st.error(f"❌ Connection failed: {response.status_code}")
+        except Exception as e:
+            st.error(f"❌ Cannot connect: {str(e)}")
+            st.info("💡 Make sure Ollama is running at the specified URL")
     
     # Authentication option
     force_fresh_login = st.checkbox("🔄 Force fresh login (for new users)", value=False, 
