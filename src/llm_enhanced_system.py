@@ -131,13 +131,41 @@ class UnifiedLLMService:
         
         # Function to get configuration from Streamlit secrets or environment
         def get_config(key, default=None):
-            # First try Streamlit secrets
+            # Check if we're running in Streamlit environment
+            is_streamlit = False
             try:
                 import streamlit as st
-                return st.secrets.get(key, default)
-            except:
-                # Fall back to environment variables
-                return os.getenv(key, default)
+                if hasattr(st, 'secrets'):
+                    is_streamlit = True
+                    if key in st.secrets:
+                        value = st.secrets[key]
+                        # Skip placeholder values
+                        if value and not str(value).startswith("your_") and "your_" not in str(value).lower():
+                            return value
+            except Exception:
+                pass
+            
+            # For local development or fallback, try environment variables
+            env_value = os.getenv(key)
+            if env_value and env_value != default and not env_value.startswith("your_"):
+                return env_value
+            
+            # If running locally and no env var, try to read from secrets.toml directly
+            if not is_streamlit:
+                try:
+                    import toml
+                    secrets_file = os.path.join(os.path.dirname(__file__), '..', '.streamlit', 'secrets.toml')
+                    if os.path.exists(secrets_file):
+                        with open(secrets_file, 'r') as f:
+                            secrets = toml.load(f)
+                            if key in secrets:
+                                value = secrets[key]
+                                if value and not str(value).startswith("your_"):
+                                    return value
+                except Exception:
+                    pass
+            
+            return default
         
         # Configure logging
         log_level = get_config('LOG_LEVEL', 'INFO')
@@ -162,8 +190,14 @@ class UnifiedLLMService:
             self.model = model or get_config('OPENAI_MODEL', 'gpt-4o-mini')
             self.api_key = get_config('OPENAI_API_KEY')
             
-            if not self.api_key:
+            # Debug logging for API key
+            if self.api_key:
+                masked_key = self.api_key[:10] + "***" + self.api_key[-4:] if len(self.api_key) > 14 else "***"
+                self.logger.info(f"🔑 API Key loaded: {masked_key}")
+            else:
+                self.logger.error("❌ No OpenAI API key found!")
                 raise ValueError("OPENAI_API_KEY not found in Streamlit secrets or environment variables")
+            
             self.logger.info(f"🔥 Using OpenAI - Model: {self.model}")
             self._test_openai_connection()
         else:
@@ -1589,13 +1623,41 @@ class LLMEnhancedEmailSystem:
         
         # Function to get configuration from Streamlit secrets or environment
         def get_config(key, default=None):
-            # First try Streamlit secrets
+            # Check if we're running in Streamlit environment
+            is_streamlit = False
             try:
                 import streamlit as st
-                return st.secrets.get(key, default)
-            except:
-                # Fall back to environment variables
-                return os.getenv(key, default)
+                if hasattr(st, 'secrets'):
+                    is_streamlit = True
+                    if key in st.secrets:
+                        value = st.secrets[key]
+                        # Skip placeholder values
+                        if value and not str(value).startswith("your_") and "your_" not in str(value).lower():
+                            return value
+            except Exception:
+                pass
+            
+            # For local development or fallback, try environment variables
+            env_value = os.getenv(key)
+            if env_value and env_value != default and not env_value.startswith("your_"):
+                return env_value
+            
+            # If running locally and no env var, try to read from secrets.toml directly
+            if not is_streamlit:
+                try:
+                    import toml
+                    secrets_file = os.path.join(os.path.dirname(__file__), '..', '.streamlit', 'secrets.toml')
+                    if os.path.exists(secrets_file):
+                        with open(secrets_file, 'r') as f:
+                            secrets = toml.load(f)
+                            if key in secrets:
+                                value = secrets[key]
+                                if value and not str(value).startswith("your_"):
+                                    return value
+                except Exception:
+                    pass
+            
+            return default
         
         # Initialize Outlook service
         self.outlook = OutlookService(
@@ -1866,20 +1928,60 @@ Keep it under 200 words and focus on actionable style elements.
             # Adjust email limits and time windows based on mode
             mode = self.processing_mode
             
+            # Get mode-specific limits from configuration
+            def get_config(key, default=None):
+                # Check if we're running in Streamlit environment
+                is_streamlit = False
+                try:
+                    import streamlit as st
+                    if hasattr(st, 'secrets'):
+                        is_streamlit = True
+                        if key in st.secrets:
+                            value = st.secrets[key]
+                            # Skip placeholder values
+                            if value and not str(value).startswith("your_") and "your_" not in str(value).lower():
+                                return value
+                except Exception:
+                    pass
+                
+                # For local development or fallback, try environment variables
+                env_value = os.getenv(key)
+                if env_value and env_value != default and not env_value.startswith("your_"):
+                    return env_value
+                
+                # If running locally and no env var, try to read from secrets.toml directly
+                if not is_streamlit:
+                    try:
+                        import toml
+                        secrets_file = os.path.join(os.path.dirname(__file__), '..', '.streamlit', 'secrets.toml')
+                        if os.path.exists(secrets_file):
+                            with open(secrets_file, 'r') as f:
+                                secrets = toml.load(f)
+                                if key in secrets:
+                                    value = secrets[key]
+                                    if value and not str(value).startswith("your_"):
+                                        return value
+                    except Exception:
+                        pass
+                
+                return default
+            
             if mode == "ultra_lite":
                 # Ultra-lite: Minimal emails for instant processing
-                initial_max = min(max_emails, 5)
-                extended_max = min(max_emails, 8)
+                initial_max = min(max_emails, get_config('ULTRA_LITE_INITIAL_MAX', 5))
+                extended_max = min(max_emails, get_config('ULTRA_LITE_EXTENDED_MAX', 8))
                 print(f"🏃 ULTRA-LITE MODE: Processing up to {initial_max} emails for instant results")
             elif mode == "lite":
                 # Lite: Moderate email count for fast LLM processing  
-                initial_max = min(max_emails, 10)
-                extended_max = min(max_emails, 15)
+                initial_max = min(max_emails, get_config('LITE_INITIAL_MAX', 10))
+                extended_max = min(max_emails, get_config('LITE_EXTENDED_MAX', 15))
                 print(f"⚡ LITE MODE: Processing up to {initial_max} emails for fast LLM analysis")
             else:  # deep mode
                 # Deep mode: Full email count
-                initial_max = max_emails
-                extended_max = max_emails * 2
+                deep_initial = get_config('DEEP_INITIAL_MAX', 20)
+                deep_multiplier = get_config('DEEP_EXTENDED_MULTIPLIER', 2)
+                initial_max = min(max_emails, deep_initial)
+                extended_max = max_emails * deep_multiplier
                 print(f"🔬 DEEP MODE: Processing up to {initial_max} emails with full analysis")
             
             # First, get recent emails from past 3 days (72 hours) to catch deadline emails

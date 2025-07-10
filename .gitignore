@@ -207,3 +207,10 @@ marimo/_lsp/
 __marimo__/
 .claude
 src/.env
+# Streamlit secrets (all variants)
+.streamlit/secrets.toml
+.streamlit/secrets.local.toml
+src/.streamlit/secrets.toml
+src/.streamlit/secrets.local.toml
+**/secrets.toml
+**/secrets.local.toml
