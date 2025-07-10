@@ -124,6 +124,7 @@ class UnifiedLLMService:
     
     def __init__(self, model_type: str = None, model: str = None, host: str = None):
         import os
+        import logging
         from dotenv import load_dotenv
         
         load_dotenv()
@@ -138,16 +139,24 @@ class UnifiedLLMService:
                 # Fall back to environment variables
                 return os.getenv(key, default)
         
+        # Configure logging
+        log_level = get_config('LOG_LEVEL', 'INFO')
+        logging.basicConfig(
+            level=getattr(logging, log_level.upper()),
+            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        )
+        self.logger = logging.getLogger(__name__)
+        
         self.model_type = model_type or get_config('MODEL_TYPE', 'openai')
         self._response_cache = {}  # Cache for LLM responses
         
-        print(f"🤖 Initializing LLM Service - Type: {self.model_type}")
+        self.logger.info(f"🤖 Initializing LLM Service - Type: {self.model_type}")
         
         if self.model_type == 'ollama':
             self.model = model or get_config('OLLAMA_MODEL', 'mistral')
             self.host = host or get_config('OLLAMA_HOST', 'http://localhost:11434')
             self.url = f"{self.host}/api/generate"
-            print(f"🦙 Using Ollama - Model: {self.model}, Host: {self.host}")
+            self.logger.info(f"🦙 Using Ollama - Model: {self.model}, Host: {self.host}")
             self._test_ollama_connection()
         elif self.model_type == 'openai':
             self.model = model or get_config('OPENAI_MODEL', 'gpt-4o-mini')
@@ -155,7 +164,7 @@ class UnifiedLLMService:
             
             if not self.api_key:
                 raise ValueError("OPENAI_API_KEY not found in Streamlit secrets or environment variables")
-            print(f"🔥 Using OpenAI - Model: {self.model}")
+            self.logger.info(f"🔥 Using OpenAI - Model: {self.model}")
             self._test_openai_connection()
         else:
             raise ValueError(f"Unsupported model_type: {self.model_type}. Use 'openai' or 'ollama'.")
@@ -169,17 +178,17 @@ class UnifiedLLMService:
                 available_models = [m['name'] for m in models]
                 
                 if any(self.model in model for model in available_models):
-                    print(f"✅ Connected to Ollama - Model '{self.model}' available")
+                    self.logger.info(f"✅ Connected to Ollama - Model '{self.model}' available")
                 else:
-                    print(f"⚠️ Model '{self.model}' not found. Available models: {available_models}")
+                    self.logger.warning(f"⚠️ Model '{self.model}' not found. Available models: {available_models}")
                     if available_models:
                         self.model = available_models[0].split(':')[0]
-                        print(f"🔄 Switching to available model: {self.model}")
+                        self.logger.info(f"🔄 Switching to available model: {self.model}")
             else:
-                print(f"❌ Ollama connection failed: {response.status_code}")
+                self.logger.error(f"❌ Ollama connection failed: {response.status_code}")
         except Exception as e:
-            print(f"❌ Cannot connect to Ollama: {e}")
-            print("📝 Make sure Ollama is running: 'ollama serve'")
+            self.logger.error(f"❌ Cannot connect to Ollama: {e}")
+            self.logger.info("📝 Make sure Ollama is running: 'ollama serve'")
     
     def _test_openai_connection(self):
         """Test connection to OpenAI"""
@@ -192,9 +201,9 @@ class UnifiedLLMService:
                 messages=[{"role": "user", "content": "test"}],
                 max_tokens=1
             )
-            print(f"✅ Connected to OpenAI - Model '{self.model}' available")
+            self.logger.info(f"✅ Connected to OpenAI - Model '{self.model}' available")
         except Exception as e:
-            print(f"❌ Cannot connect to OpenAI: {e}")
+            self.logger.error(f"❌ Cannot connect to OpenAI: {e}")
     
     def generate_response(self, prompt: str, max_tokens: int = 1000, temperature: float = 0.7) -> str:
         """Generate response using either OpenAI or Ollama with caching"""
@@ -204,11 +213,11 @@ class UnifiedLLMService:
         
         # Check cache first
         if cache_key in self._response_cache:
-            print(f"🔄 Cache hit for {self.model_type} - {self.model}")
+            self.logger.debug(f"🔄 Cache hit for {self.model_type} - {self.model}")
             return self._response_cache[cache_key]
         
         try:
-            print(f"🚀 Generating response with {self.model_type} - {self.model}")
+            self.logger.debug(f"🚀 Generating response with {self.model_type} - {self.model}")
             if self.model_type == 'ollama':
                 response_text = self._generate_ollama_response(prompt, max_tokens, temperature)
             elif self.model_type == 'openai':
@@ -218,11 +227,11 @@ class UnifiedLLMService:
             
             # Cache the response
             self._response_cache[cache_key] = response_text
-            print(f"✅ Response generated successfully with {self.model_type}")
+            self.logger.debug(f"✅ Response generated successfully with {self.model_type}")
             return response_text
             
         except Exception as e:
-            print(f"❌ Error generating response with {self.model_type}: {str(e)}")
+            self.logger.error(f"❌ Error generating response with {self.model_type}: {str(e)}")
             return f"Error: {str(e)}"
     
     def _generate_ollama_response(self, prompt: str, max_tokens: int, temperature: float) -> str:
