@@ -1929,13 +1929,23 @@ async def build_outlook_reader_agent() -> LlmAgent:
     
     async def outlook_tool(query: str) -> str:
         """Custom Outlook reading tool"""
-        # Get credentials from environment
-        client_id = os.getenv('AZURE_CLIENT_ID')
-        client_secret = os.getenv('AZURE_CLIENT_SECRET')  # Optional for public apps
-        tenant_id = os.getenv('AZURE_TENANT_ID', 'common')
+        # Function to get configuration from Streamlit secrets or environment
+        def get_config(key, default=None):
+            # First try Streamlit secrets
+            try:
+                import streamlit as st
+                return st.secrets.get(key, default)
+            except:
+                # Fall back to environment variables
+                return os.getenv(key, default)
+        
+        # Get credentials from Streamlit secrets or environment
+        client_id = get_config('AZURE_CLIENT_ID')
+        client_secret = get_config('AZURE_CLIENT_SECRET')  # Optional for public apps
+        tenant_id = get_config('AZURE_TENANT_ID', 'common')
         
         if not client_id:
-            return "Error: AZURE_CLIENT_ID not found in environment variables"
+            return "Error: AZURE_CLIENT_ID not found in Streamlit secrets or environment variables"
         
         outlook = OutlookService(client_id, client_secret, tenant_id)
         

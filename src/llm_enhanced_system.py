@@ -128,19 +128,34 @@ class UnifiedLLMService:
         
         load_dotenv()
         
-        self.model_type = model_type or os.getenv('MODEL_TYPE', 'openai')
+        # Function to get configuration from Streamlit secrets or environment
+        def get_config(key, default=None):
+            # First try Streamlit secrets
+            try:
+                import streamlit as st
+                return st.secrets.get(key, default)
+            except:
+                # Fall back to environment variables
+                return os.getenv(key, default)
+        
+        self.model_type = model_type or get_config('MODEL_TYPE', 'openai')
         self._response_cache = {}  # Cache for LLM responses
         
+        print(f"🤖 Initializing LLM Service - Type: {self.model_type}")
+        
         if self.model_type == 'ollama':
-            self.model = model or os.getenv('OLLAMA_MODEL', 'mistral')
-            self.host = host or os.getenv('OLLAMA_HOST', 'http://localhost:11434')
+            self.model = model or get_config('OLLAMA_MODEL', 'mistral')
+            self.host = host or get_config('OLLAMA_HOST', 'http://localhost:11434')
             self.url = f"{self.host}/api/generate"
+            print(f"🦙 Using Ollama - Model: {self.model}, Host: {self.host}")
             self._test_ollama_connection()
         elif self.model_type == 'openai':
-            self.model = model or os.getenv('OPENAI_MODEL', 'gpt-4o-mini')
-            self.api_key = os.getenv('OPENAI_API_KEY')
+            self.model = model or get_config('OPENAI_MODEL', 'gpt-4o-mini')
+            self.api_key = get_config('OPENAI_API_KEY')
+            
             if not self.api_key:
-                raise ValueError("OPENAI_API_KEY environment variable is required for OpenAI")
+                raise ValueError("OPENAI_API_KEY not found in Streamlit secrets or environment variables")
+            print(f"🔥 Using OpenAI - Model: {self.model}")
             self._test_openai_connection()
         else:
             raise ValueError(f"Unsupported model_type: {self.model_type}. Use 'openai' or 'ollama'.")
@@ -189,9 +204,11 @@ class UnifiedLLMService:
         
         # Check cache first
         if cache_key in self._response_cache:
+            print(f"🔄 Cache hit for {self.model_type} - {self.model}")
             return self._response_cache[cache_key]
         
         try:
+            print(f"🚀 Generating response with {self.model_type} - {self.model}")
             if self.model_type == 'ollama':
                 response_text = self._generate_ollama_response(prompt, max_tokens, temperature)
             elif self.model_type == 'openai':
@@ -201,9 +218,11 @@ class UnifiedLLMService:
             
             # Cache the response
             self._response_cache[cache_key] = response_text
+            print(f"✅ Response generated successfully with {self.model_type}")
             return response_text
             
         except Exception as e:
+            print(f"❌ Error generating response with {self.model_type}: {str(e)}")
             return f"Error: {str(e)}"
     
     def _generate_ollama_response(self, prompt: str, max_tokens: int, temperature: float) -> str:
@@ -1559,11 +1578,21 @@ class LLMEnhancedEmailSystem:
         self.cold_email_detector = None  # Will be initialized after outlook authentication
         self.automation_engine = None  # Will be initialized after outlook authentication
         
+        # Function to get configuration from Streamlit secrets or environment
+        def get_config(key, default=None):
+            # First try Streamlit secrets
+            try:
+                import streamlit as st
+                return st.secrets.get(key, default)
+            except:
+                # Fall back to environment variables
+                return os.getenv(key, default)
+        
         # Initialize Outlook service
         self.outlook = OutlookService(
-            client_id=os.getenv('AZURE_CLIENT_ID'),
-            client_secret=os.getenv('AZURE_CLIENT_SECRET'),
-            tenant_id=os.getenv('AZURE_TENANT_ID', 'common')
+            client_id=get_config('AZURE_CLIENT_ID'),
+            client_secret=get_config('AZURE_CLIENT_SECRET'),
+            tenant_id=get_config('AZURE_TENANT_ID', 'common')
         )
         
         # Stats
