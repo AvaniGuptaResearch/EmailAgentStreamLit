@@ -57,7 +57,7 @@ def initialize_system(force_fresh=False):
         """, unsafe_allow_html=True)
         
         with st.spinner("🔧 Initializing and authenticating..."):
-            st.session_state.llm_system = LLMEnhancedEmailSystem(ollama_model="mistral")
+            st.session_state.llm_system = LLMEnhancedEmailSystem()
             # Trigger authentication during initialization
             st.session_state.llm_system.outlook.authenticate(force_fresh=force_fresh)
         

@@ -119,17 +119,33 @@ class SentimentAnalysis:
     emotion_score: float  # -1 to 1 (negative to positive)
     requires_immediate_attention: bool
 
-class OllamaLLMService:
-    """Service for interacting with Ollama LLM"""
+class UnifiedLLMService:
+    """Service for interacting with both OpenAI and Ollama LLMs"""
     
-    def __init__(self, model: str = "mistral", host: str = "http://localhost:11434"):
-        self.model = model
-        self.host = host
-        self.url = f"{host}/api/generate"
+    def __init__(self, model_type: str = None, model: str = None, host: str = None):
+        import os
+        from dotenv import load_dotenv
+        
+        load_dotenv()
+        
+        self.model_type = model_type or os.getenv('MODEL_TYPE', 'openai')
         self._response_cache = {}  # Cache for LLM responses
-        self._test_connection()
+        
+        if self.model_type == 'ollama':
+            self.model = model or os.getenv('OLLAMA_MODEL', 'mistral')
+            self.host = host or os.getenv('OLLAMA_HOST', 'http://localhost:11434')
+            self.url = f"{self.host}/api/generate"
+            self._test_ollama_connection()
+        elif self.model_type == 'openai':
+            self.model = model or os.getenv('OPENAI_MODEL', 'gpt-4o-mini')
+            self.api_key = os.getenv('OPENAI_API_KEY')
+            if not self.api_key:
+                raise ValueError("OPENAI_API_KEY environment variable is required for OpenAI")
+            self._test_openai_connection()
+        else:
+            raise ValueError(f"Unsupported model_type: {self.model_type}. Use 'openai' or 'ollama'.")
     
-    def _test_connection(self):
+    def _test_ollama_connection(self):
         """Test connection to Ollama"""
         try:
             response = requests.get(f"{self.host}/api/tags", timeout=5)
@@ -150,16 +166,48 @@ class OllamaLLMService:
             print(f"❌ Cannot connect to Ollama: {e}")
             print("📝 Make sure Ollama is running: 'ollama serve'")
     
+    def _test_openai_connection(self):
+        """Test connection to OpenAI"""
+        try:
+            from openai import OpenAI
+            client = OpenAI(api_key=self.api_key)
+            # Test with a simple completion
+            response = client.chat.completions.create(
+                model=self.model,
+                messages=[{"role": "user", "content": "test"}],
+                max_tokens=1
+            )
+            print(f"✅ Connected to OpenAI - Model '{self.model}' available")
+        except Exception as e:
+            print(f"❌ Cannot connect to OpenAI: {e}")
+    
     def generate_response(self, prompt: str, max_tokens: int = 1000, temperature: float = 0.7) -> str:
-        """Generate response using Ollama with caching"""
+        """Generate response using either OpenAI or Ollama with caching"""
         # Create cache key from prompt and parameters
         import hashlib
-        cache_key = hashlib.md5(f"{prompt}_{max_tokens}_{temperature}".encode()).hexdigest()
+        cache_key = hashlib.md5(f"{prompt}_{max_tokens}_{temperature}_{self.model_type}".encode()).hexdigest()
         
         # Check cache first
         if cache_key in self._response_cache:
             return self._response_cache[cache_key]
         
+        try:
+            if self.model_type == 'ollama':
+                response_text = self._generate_ollama_response(prompt, max_tokens, temperature)
+            elif self.model_type == 'openai':
+                response_text = self._generate_openai_response(prompt, max_tokens, temperature)
+            else:
+                return "Error: Unsupported model type"
+            
+            # Cache the response
+            self._response_cache[cache_key] = response_text
+            return response_text
+            
+        except Exception as e:
+            return f"Error: {str(e)}"
+    
+    def _generate_ollama_response(self, prompt: str, max_tokens: int, temperature: float) -> str:
+        """Generate response using Ollama"""
         payload = {
             "model": self.model,
             "prompt": prompt,
@@ -180,10 +228,7 @@ class OllamaLLMService:
             result = response.json()
             
             if 'response' in result:
-                response_text = result['response'].strip()
-                # Cache the response
-                self._response_cache[cache_key] = response_text
-                return response_text
+                return result['response'].strip()
             else:
                 print(f"❌ Unexpected response format: {result}")
                 return "Error: Invalid response format"
@@ -194,8 +239,21 @@ class OllamaLLMService:
             return f"Error: LLM request failed - {str(e)}"
         except json.JSONDecodeError:
             return "Error: Invalid JSON response from LLM"
-        except Exception as e:
-            return f"Error: {str(e)}"
+    
+    def _generate_openai_response(self, prompt: str, max_tokens: int, temperature: float) -> str:
+        """Generate response using OpenAI"""
+        from openai import OpenAI
+        
+        client = OpenAI(api_key=self.api_key)
+        
+        response = client.chat.completions.create(
+            model=self.model,
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=max_tokens,
+            temperature=temperature
+        )
+        
+        return response.choices[0].message.content.strip()
     
     def call_with_json_parsing(self, prompt: str) -> Dict[str, Any]:
         """Call LLM and parse JSON response"""
@@ -214,7 +272,7 @@ class OllamaLLMService:
 class LLMEmailAnalyzer:
     """Advanced email analyzer using LLM"""
     
-    def __init__(self, llm_service: OllamaLLMService):
+    def __init__(self, llm_service: UnifiedLLMService):
         self.llm = llm_service
     
     def analyze_email(self, email: OutlookEmailData, user_context: str = "", email_thread_context: str = "") -> LLMAnalysisResult:
@@ -754,7 +812,7 @@ class FollowUpTracker:
 class EmailSummarizer:
     """Generates summaries of long emails"""
     
-    def __init__(self, llm_service: OllamaLLMService):
+    def __init__(self, llm_service: UnifiedLLMService):
         self.llm = llm_service
     
     def should_summarize(self, email: OutlookEmailData) -> bool:
@@ -834,7 +892,7 @@ Format as JSON:
 class EmailSecurityAnalyzer:
     """Analyzes emails for security threats"""
     
-    def __init__(self, llm_service: OllamaLLMService):
+    def __init__(self, llm_service: UnifiedLLMService):
         self.llm = llm_service
     
     def analyze_security(self, email: OutlookEmailData) -> SecurityAnalysis:
@@ -1009,7 +1067,7 @@ class EmailCategory:
 class SmartCategorizer:
     """Categorizes emails by project, department, and other criteria"""
     
-    def __init__(self, llm_service: OllamaLLMService):
+    def __init__(self, llm_service: UnifiedLLMService):
         self.llm = llm_service
         self.categories = {
             'academic': ['probation', 'evaluation', 'grade', 'course', 'thesis', 'research'],
@@ -1114,7 +1172,7 @@ Format as JSON:
 class LLMResponseDrafter:
     """Advanced response drafter using LLM"""
     
-    def __init__(self, llm_service: OllamaLLMService):
+    def __init__(self, llm_service: UnifiedLLMService):
         self.llm = llm_service
     
     def generate_draft(self, email: OutlookEmailData, analysis: LLMAnalysisResult, 
@@ -1476,9 +1534,9 @@ CRITICAL REQUIREMENTS:
 class LLMEnhancedEmailSystem:
     """Complete email system using LLM for analysis and drafting"""
     
-    def __init__(self, ollama_model: str = "mistral"):
+    def __init__(self, model_type: str = None, model: str = None, host: str = None):
         # Initialize services
-        self.llm = OllamaLLMService(model=ollama_model)
+        self.llm = UnifiedLLMService(model_type=model_type, model=model, host=host)
         self.analyzer = LLMEmailAnalyzer(self.llm)
         self.drafter = LLMResponseDrafter(self.llm)
         
@@ -2870,7 +2928,7 @@ Keep it under 200 words and focus on actionable style elements.
 class WritingStyleAnalyzer:
     """Analyzes user's writing style from sent emails (inspired by inbox-zero)"""
     
-    def __init__(self, llm_service: OllamaLLMService):
+    def __init__(self, llm_service: UnifiedLLMService):
         self.llm_service = llm_service
     
     def analyze_sent_emails(self, outlook: OutlookService, max_emails: int = 20) -> WritingStyle:
@@ -3115,7 +3173,7 @@ class ColdEmailAnalysis:
 class SmartEmailCategorizer:
     """Advanced AI-powered email categorization (inspired by inbox-zero 2024)"""
     
-    def __init__(self, llm_service: OllamaLLMService):
+    def __init__(self, llm_service: UnifiedLLMService):
         self.llm_service = llm_service
         self.category_patterns = self._load_category_patterns()
         self.sender_database = {}  # Cache for sender classifications
@@ -3295,7 +3353,7 @@ class SmartEmailCategorizer:
 class ColdEmailDetector:
     """Advanced cold email detection system (inspired by inbox-zero 2024)"""
     
-    def __init__(self, llm_service: OllamaLLMService, outlook_service: OutlookService):
+    def __init__(self, llm_service: UnifiedLLMService, outlook_service: OutlookService):
         self.llm_service = llm_service
         self.outlook_service = outlook_service
         self.known_senders = set()  # Cache of known legitimate senders
@@ -3556,7 +3614,7 @@ class EmailRule:
 class EmailAutomationEngine:
     """Rule-based email automation system (inspired by inbox-zero 2024)"""
     
-    def __init__(self, llm_service: OllamaLLMService, outlook_service: OutlookService):
+    def __init__(self, llm_service: UnifiedLLMService, outlook_service: OutlookService):
         self.llm_service = llm_service
         self.outlook = outlook_service  # Use consistent naming
         self.rules = self._load_default_rules()
@@ -4003,7 +4061,7 @@ class KnowledgeBase:
 class ContextualDraftGenerator:
     """Enhanced draft generator with multi-source context (inspired by inbox-zero)"""
     
-    def __init__(self, llm_service: OllamaLLMService):
+    def __init__(self, llm_service: UnifiedLLMService):
         self.llm_service = llm_service
         self.writing_analyzer = WritingStyleAnalyzer(llm_service)
         self.knowledge_base = KnowledgeBase()
@@ -4139,7 +4197,7 @@ def main():
     
     # Initialize LLM system
     try:
-        email_system = LLMEnhancedEmailSystem(ollama_model="mistral")
+        email_system = LLMEnhancedEmailSystem()
         
         # Process emails
         max_emails = 10
