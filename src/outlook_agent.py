@@ -610,6 +610,20 @@ class OutlookService:
     
     def get_recent_emails(self, max_results: int = 20, hours_back: int = 24) -> List[OutlookEmailData]:
         """Fetch recent emails from Outlook inbox (excluding sent emails)"""
+        # Check if we should process only unread emails
+        unread_only = False
+        try:
+            # Check Streamlit secrets first
+            import streamlit as st
+            if hasattr(st, 'secrets') and 'PROCESS_UNREAD_ONLY' in st.secrets:
+                unread_only = str(st.secrets['PROCESS_UNREAD_ONLY']).lower() == 'true'
+            else:
+                # Fallback to environment variable
+                unread_only = os.getenv('PROCESS_UNREAD_ONLY', 'false').lower() == 'true'
+        except:
+            # Fallback to environment variable
+            unread_only = os.getenv('PROCESS_UNREAD_ONLY', 'false').lower() == 'true'
+        
         # Calculate time filter
         after_date = datetime.now() - timedelta(hours=hours_back)
         after_timestamp = after_date.strftime('%Y-%m-%dT%H:%M:%S.000Z')
@@ -622,9 +636,16 @@ class OutlookService:
             current_user_email = ''
         
         # Build query with filters - exclude emails sent by current user
-        filter_query = f"receivedDateTime ge {after_timestamp}"
-        if current_user_email:
-            filter_query += f" and sender/emailAddress/address ne '{current_user_email}'"
+        if unread_only:
+            # Process only unread emails (no time filter)
+            filter_query = "isRead eq false"
+            if current_user_email:
+                filter_query += f" and sender/emailAddress/address ne '{current_user_email}'"
+        else:
+            # Original logic: time-based filtering
+            filter_query = f"receivedDateTime ge {after_timestamp}"
+            if current_user_email:
+                filter_query += f" and sender/emailAddress/address ne '{current_user_email}'"
         
         select_fields = "id,subject,sender,toRecipients,body,bodyPreview,receivedDateTime,importance,isRead,hasAttachments,categories,conversationId"
         

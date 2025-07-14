@@ -49,12 +49,13 @@ cd EmailAgentStreamlit
 pip install -r requirements.txt
 ```
 
-3. **Set up environment variables**:
-Create a `.env` file in the root directory:
-```env
-AZURE_CLIENT_ID=your_azure_client_id
-AZURE_CLIENT_SECRET=your_azure_client_secret
-AZURE_TENANT_ID=your_tenant_id_or_common
+3. **Set up Streamlit secrets**:
+Create a `.streamlit/secrets.toml` file in the root directory:
+```toml
+AZURE_CLIENT_ID = "your_azure_client_id"
+AZURE_CLIENT_SECRET = "your_azure_client_secret"
+AZURE_TENANT_ID = "your_tenant_id_or_common"
+PROCESS_UNREAD_ONLY = false
 ```
 
 ## 🚀 Usage
@@ -82,15 +83,17 @@ EmailAgentStreamlit/
 │   └── outlook_agent.py          # Microsoft Graph integration
 ├── requirements.txt              # Python dependencies
 ├── README.md                    # This file
-└── .env                         # Environment variables (create this)
+└── .streamlit/
+    └── secrets.toml             # Streamlit secrets (create this)
 ```
 
 ## 🔧 Configuration
 
-### Environment Variables
+### Streamlit Secrets (`.streamlit/secrets.toml`)
 - `AZURE_CLIENT_ID`: Your Azure AD app client ID
 - `AZURE_CLIENT_SECRET`: Your Azure AD app client secret  
 - `AZURE_TENANT_ID`: Your tenant ID (or 'common' for multi-tenant)
+- `PROCESS_UNREAD_ONLY`: Set to true to process only unread emails (default: false)
 
 ### Ollama Configuration
 - Default model: `mistral`
@@ -100,7 +103,9 @@ EmailAgentStreamlit/
 ## 🎯 How It Works
 
 1. **Authentication**: Connects to Microsoft Graph using Azure AD
-2. **Email Fetching**: Retrieves recent emails from your inbox
+2. **Email Fetching**: Retrieves emails from your inbox
+   - **Default mode**: Recent emails (72 hours, expands to 7 days if needed)
+   - **Unread-only mode**: All unread emails (no time limit)
 3. **LLM Analysis**: Each email is analyzed for:
    - Priority score (0-100)
    - Urgency level
@@ -109,9 +114,13 @@ EmailAgentStreamlit/
 4. **Real-time Display**: Results stream live to the web interface
 5. **Draft Generation**: Creates contextual response drafts
 
+### Email Processing Modes
+- **Time-based processing** (default): Scans recent emails within time window
+- **Unread-only processing**: Set `PROCESS_UNREAD_ONLY = true` in `.streamlit/secrets.toml` to process all unread emails regardless of age
+
 ## 🛡️ Security Notes
 
-- All credentials are stored in environment variables
+- All credentials are stored in Streamlit secrets
 - OAuth2 flow used for Microsoft Graph authentication
 - No email content is sent to external services (LLM runs locally)
 - Drafts are saved to your Outlook Drafts folder
@@ -125,7 +134,7 @@ EmailAgentStreamlit/
 - Check if Mistral model is installed: `ollama list`
 
 **"Azure credentials missing"**
-- Verify `.env` file exists with correct credentials
+- Verify `.streamlit/secrets.toml` file exists with correct credentials
 - Check Azure AD app permissions are granted
 
 **"Import errors"**

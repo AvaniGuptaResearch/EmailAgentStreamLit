@@ -1923,7 +1923,22 @@ Keep it under 200 words and focus on actionable style elements.
                 print("🏃 ULTRA-LITE MODE: Skipping enhanced features for maximum speed")
             
             # Step 3: Fetch emails (enhanced to catch critical emails)
-            print(f"📥 Fetching recent emails...")
+            unread_only = False
+            try:
+                # Check Streamlit secrets first
+                import streamlit as st
+                if hasattr(st, 'secrets') and 'PROCESS_UNREAD_ONLY' in st.secrets:
+                    unread_only = str(st.secrets['PROCESS_UNREAD_ONLY']).lower() == 'true'
+                else:
+                    # Fallback to environment variable
+                    unread_only = os.getenv('PROCESS_UNREAD_ONLY', 'false').lower() == 'true'
+            except:
+                # Fallback to environment variable
+                unread_only = os.getenv('PROCESS_UNREAD_ONLY', 'false').lower() == 'true'
+            if unread_only:
+                print(f"📥 Fetching all unread emails...")
+            else:
+                print(f"📥 Fetching recent emails...")
             
             # Adjust email limits and time windows based on mode
             mode = self.processing_mode
@@ -1984,14 +1999,19 @@ Keep it under 200 words and focus on actionable style elements.
                 extended_max = max_emails * deep_multiplier
                 print(f"🔬 DEEP MODE: Processing up to {initial_max} emails with full analysis")
             
-            # First, get recent emails from past 3 days (72 hours) to catch deadline emails
-            print(f"🔍 Scanning past 72 hours for critical emails...")
-            emails = self.outlook.get_recent_emails(max_results=initial_max, hours_back=72)
-            
-            # Also try to get more emails if we're not getting enough (but respect mode limits)
-            if len(emails) < 5:  # Reduced threshold for expansion
-                print(f"📧 Only found {len(emails)} emails, expanding search to past 7 days...")
-                emails = self.outlook.get_recent_emails(max_results=extended_max, hours_back=168)  # 7 days
+            # Fetch emails based on mode
+            if unread_only:
+                print(f"📬 Processing all unread emails (no time limit)...")
+                emails = self.outlook.get_recent_emails(max_results=initial_max, hours_back=72)  # hours_back ignored in unread mode
+            else:
+                # First, get recent emails from past 3 days (72 hours) to catch deadline emails
+                print(f"🔍 Scanning past 72 hours for critical emails...")
+                emails = self.outlook.get_recent_emails(max_results=initial_max, hours_back=72)
+                
+                # Also try to get more emails if we're not getting enough (but respect mode limits)
+                if len(emails) < 5:  # Reduced threshold for expansion
+                    print(f"📧 Only found {len(emails)} emails, expanding search to past 7 days...")
+                    emails = self.outlook.get_recent_emails(max_results=extended_max, hours_back=168)  # 7 days
             
             # For now, let's focus on the improved time window which should catch your deadline email
             # The Graph API search has compatibility issues that need further investigation
