@@ -616,13 +616,18 @@ class OutlookService:
             # Check Streamlit secrets first
             import streamlit as st
             if hasattr(st, 'secrets') and 'PROCESS_UNREAD_ONLY' in st.secrets:
-                unread_only = str(st.secrets['PROCESS_UNREAD_ONLY']).lower() == 'true'
+                unread_value = st.secrets['PROCESS_UNREAD_ONLY']
+                # Handle both boolean and string values
+                if isinstance(unread_value, bool):
+                    unread_only = unread_value
+                else:
+                    unread_only = str(unread_value).lower() in ['true', '1', 'yes', 'on']
             else:
                 # Fallback to environment variable
-                unread_only = os.getenv('PROCESS_UNREAD_ONLY', 'false').lower() == 'true'
+                unread_only = os.getenv('PROCESS_UNREAD_ONLY', 'false').lower() in ['true', '1', 'yes', 'on']
         except:
             # Fallback to environment variable
-            unread_only = os.getenv('PROCESS_UNREAD_ONLY', 'false').lower() == 'true'
+            unread_only = os.getenv('PROCESS_UNREAD_ONLY', 'false').lower() in ['true', '1', 'yes', 'on']
         
         # Calculate time filter
         after_date = datetime.now() - timedelta(hours=hours_back)

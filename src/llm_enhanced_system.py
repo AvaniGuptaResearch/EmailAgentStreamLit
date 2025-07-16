@@ -1928,13 +1928,18 @@ Keep it under 200 words and focus on actionable style elements.
                 # Check Streamlit secrets first
                 import streamlit as st
                 if hasattr(st, 'secrets') and 'PROCESS_UNREAD_ONLY' in st.secrets:
-                    unread_only = str(st.secrets['PROCESS_UNREAD_ONLY']).lower() == 'true'
+                    unread_value = st.secrets['PROCESS_UNREAD_ONLY']
+                    # Handle both boolean and string values
+                    if isinstance(unread_value, bool):
+                        unread_only = unread_value
+                    else:
+                        unread_only = str(unread_value).lower() in ['true', '1', 'yes', 'on']
                 else:
                     # Fallback to environment variable
-                    unread_only = os.getenv('PROCESS_UNREAD_ONLY', 'false').lower() == 'true'
+                    unread_only = os.getenv('PROCESS_UNREAD_ONLY', 'false').lower() in ['true', '1', 'yes', 'on']
             except:
                 # Fallback to environment variable
-                unread_only = os.getenv('PROCESS_UNREAD_ONLY', 'false').lower() == 'true'
+                unread_only = os.getenv('PROCESS_UNREAD_ONLY', 'false').lower() in ['true', '1', 'yes', 'on']
             if unread_only:
                 print(f"📥 Fetching all unread emails...")
             else:
@@ -2001,8 +2006,13 @@ Keep it under 200 words and focus on actionable style elements.
             
             # Fetch emails based on mode
             if unread_only:
-                # Get unread-specific limit (0 = no limit)
-                unread_limit = get_config('UNREAD_MAX_LIMIT', 0)
+                # Get unread-specific limit (0 = no limit) and ensure it's an integer
+                unread_limit_raw = get_config('UNREAD_MAX_LIMIT', 0)
+                try:
+                    unread_limit = int(unread_limit_raw) if unread_limit_raw else 0
+                except (ValueError, TypeError):
+                    unread_limit = 0
+                
                 if unread_limit > 0:
                     print(f"📬 Processing up to {unread_limit} unread emails...")
                     emails = self.outlook.get_recent_emails(max_results=unread_limit, hours_back=72)  # hours_back ignored in unread mode
