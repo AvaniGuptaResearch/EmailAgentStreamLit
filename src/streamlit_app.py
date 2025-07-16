@@ -16,14 +16,47 @@ from dotenv import load_dotenv
 
 
 # Add current directory to path for imports
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+current_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, current_dir)
+
+# Also add parent directory to path for deployment environments
+parent_dir = os.path.dirname(current_dir)
+if parent_dir not in sys.path:
+    sys.path.insert(0, parent_dir)
 
 try:
     from llm_enhanced_system import LLMEnhancedEmailSystem
     LLM_AVAILABLE = True
 except ImportError as e:
-    st.error(f"⚠️ LLM system not available: {e}")
-    LLM_AVAILABLE = False
+    try:
+        # Try importing from src directory explicitly
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("llm_enhanced_system", 
+                                                      os.path.join(current_dir, "llm_enhanced_system.py"))
+        llm_module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(llm_module)
+        LLMEnhancedEmailSystem = llm_module.LLMEnhancedEmailSystem
+        LLM_AVAILABLE = True
+    except Exception as e2:
+        st.error(f"⚠️ LLM system not available: {e}")
+        st.error(f"⚠️ Alternative import failed: {e2}")
+        
+        # Debug information
+        st.write("**Debug Information:**")
+        st.write(f"Current directory: {current_dir}")
+        st.write(f"Parent directory: {parent_dir}")
+        st.write(f"Python path: {sys.path[:5]}")  # Show first 5 entries
+        
+        # Check if files exist
+        llm_file = os.path.join(current_dir, "llm_enhanced_system.py")
+        outlook_file = os.path.join(current_dir, "outlook_agent.py")
+        st.write(f"LLM file exists: {os.path.exists(llm_file)}")
+        st.write(f"Outlook file exists: {os.path.exists(outlook_file)}")
+        
+        if os.path.exists(current_dir):
+            st.write(f"Files in src directory: {os.listdir(current_dir)}")
+        
+        LLM_AVAILABLE = False
 
 load_dotenv()
 
@@ -42,6 +75,10 @@ if 'output' not in st.session_state:
 
 def initialize_system(force_fresh=False):
     """Initialize the system and authenticate"""
+    if not LLM_AVAILABLE:
+        st.error("❌ LLM system not available - cannot initialize")
+        return False
+        
     try:
         if not os.getenv('AZURE_CLIENT_ID'):
             st.error("❌ Azure credentials missing")
@@ -91,6 +128,10 @@ def initialize_system(force_fresh=False):
 
 def process_emails():
     """Process emails and show real-time output"""
+    if not LLM_AVAILABLE:
+        st.error("❌ LLM system not available - cannot process emails")
+        return
+        
     if not st.session_state.llm_system:
         st.error("Initialize first")
         return
