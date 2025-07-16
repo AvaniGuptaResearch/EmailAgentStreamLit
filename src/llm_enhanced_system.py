@@ -1610,7 +1610,7 @@ class LLMEnhancedEmailSystem:
         self.categorizer = SmartCategorizer(self.llm)
         
         # Initialize enhanced context-aware components (inspired by inbox-zero)
-        self.contextual_drafter = ContextualDraftGenerator(self.llm)
+        self.contextual_drafter = ContextualDraftGenerator(self.llm, self.outlook)
         self.writing_analyzer = WritingStyleAnalyzer(self.llm)
         self.history_extractor = None  # Will be initialized after outlook authentication
         self.knowledge_base = KnowledgeBase()
@@ -4240,8 +4240,9 @@ class KnowledgeBase:
 class ContextualDraftGenerator:
     """Enhanced draft generator with multi-source context (inspired by inbox-zero)"""
     
-    def __init__(self, llm_service: UnifiedLLMService):
+    def __init__(self, llm_service: UnifiedLLMService, outlook_service=None):
         self.llm_service = llm_service
+        self.outlook_service = outlook_service
         self.writing_analyzer = WritingStyleAnalyzer(llm_service)
         self.knowledge_base = KnowledgeBase()
     
@@ -4301,12 +4302,24 @@ YOUR WRITING STYLE:
 - Common phrases: {', '.join(context.writing_style.common_phrases[:3])}
 """
         
+        # Get current user info
+        try:
+            user_info = self.outlook_service.get_user_info() if self.outlook_service else {}
+            current_user_name = user_info.get('name', 'User')
+            current_user_email = user_info.get('email', '')
+        except:
+            current_user_name = 'User'
+            current_user_email = ''
+        
         # Main prompt
         prompt = f"""
-You are an AI email assistant helping to write a professional reply. Use the provided context to generate a personalized, contextually appropriate response.
+You are an AI email assistant helping {current_user_name} write a professional reply. Use the provided context to generate a personalized, contextually appropriate response.
+
+IMPORTANT: You are writing AS {current_user_name} <{current_user_email}>, responding TO {context.current_email.sender} <{context.current_email.sender_email}>.
 
 CURRENT EMAIL TO RESPOND TO:
 From: {context.current_email.sender} <{context.current_email.sender_email}>
+To: {current_user_name} <{current_user_email}>
 Subject: {context.current_email.subject}
 Body: {context.current_email.body[:500]}...
 
@@ -4316,12 +4329,19 @@ Body: {context.current_email.body[:500]}...
 
 {style_context}
 
+CRITICAL USER IDENTIFICATION:
+- Current user: {current_user_name} ({current_user_email})
+- If the email mentions "{current_user_name}" or similar, that refers to YOU (the current user)
+- You are writing as {current_user_name}, not about {current_user_name} as a third person
+- Any references to "{current_user_name}" in the email should be interpreted as referring to yourself
+
 INSTRUCTIONS:
-1. Write a response that matches the user's writing style and tone
+1. Write a response FROM {current_user_name} TO {context.current_email.sender}
 2. Use relevant information from previous emails and knowledge base
 3. Be professional but match the established communication pattern
 4. Address the main points in the current email
 5. Use the user's preferred greeting and closing styles
+6. Remember: You ARE {current_user_name}, not someone else writing about {current_user_name}
 
 Return JSON with:
 {{
