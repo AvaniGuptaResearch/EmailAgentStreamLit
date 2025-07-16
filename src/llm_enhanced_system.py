@@ -1990,19 +1990,22 @@ Keep it under 200 words and focus on actionable style elements.
                 # Ultra-lite: Minimal emails for instant processing
                 initial_max = min(max_emails, get_config('ULTRA_LITE_INITIAL_MAX', 5))
                 extended_max = min(max_emails, get_config('ULTRA_LITE_EXTENDED_MAX', 8))
-                print(f"🏃 ULTRA-LITE MODE: Processing up to {initial_max} emails for instant results")
+                if not unread_only:
+                    print(f"🏃 ULTRA-LITE MODE: Processing up to {initial_max} emails for instant results")
             elif mode == "lite":
                 # Lite: Moderate email count for fast LLM processing  
                 initial_max = min(max_emails, get_config('LITE_INITIAL_MAX', 10))
                 extended_max = min(max_emails, get_config('LITE_EXTENDED_MAX', 15))
-                print(f"⚡ LITE MODE: Processing up to {initial_max} emails for fast LLM analysis")
+                if not unread_only:
+                    print(f"⚡ LITE MODE: Processing up to {initial_max} emails for fast LLM analysis")
             else:  # deep mode
                 # Deep mode: Full email count
                 deep_initial = get_config('DEEP_INITIAL_MAX', 20)
                 deep_multiplier = get_config('DEEP_EXTENDED_MULTIPLIER', 2)
                 initial_max = min(max_emails, deep_initial)
                 extended_max = max_emails * deep_multiplier
-                print(f"🔬 DEEP MODE: Processing up to {initial_max} emails with full analysis")
+                if not unread_only:
+                    print(f"🔬 DEEP MODE: Processing up to {initial_max} emails with full analysis")
             
             # Fetch emails based on mode
             if unread_only:

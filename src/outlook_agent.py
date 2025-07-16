@@ -644,8 +644,7 @@ class OutlookService:
         if unread_only:
             # Process only unread emails (no time filter)
             filter_query = "isRead eq false"
-            if current_user_email:
-                filter_query += f" and sender/emailAddress/address ne '{current_user_email}'"
+            # Skip sender filter for unread emails to avoid Graph API issues
         else:
             # Original logic: time-based filtering
             filter_query = f"receivedDateTime ge {after_timestamp}"
