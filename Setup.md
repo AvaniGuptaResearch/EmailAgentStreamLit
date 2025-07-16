@@ -56,6 +56,7 @@ AZURE_CLIENT_ID = "your_azure_client_id"
 AZURE_CLIENT_SECRET = "your_azure_client_secret"
 AZURE_TENANT_ID = "your_tenant_id_or_common"
 PROCESS_UNREAD_ONLY = false
+UNREAD_MAX_LIMIT = 0  # 0 = no limit for unread emails
 ```
 
 ## 🚀 Usage
@@ -94,6 +95,7 @@ EmailAgentStreamlit/
 - `AZURE_CLIENT_SECRET`: Your Azure AD app client secret  
 - `AZURE_TENANT_ID`: Your tenant ID (or 'common' for multi-tenant)
 - `PROCESS_UNREAD_ONLY`: Set to true to process only unread emails (default: false)
+- `UNREAD_MAX_LIMIT`: Max unread emails to process when PROCESS_UNREAD_ONLY=true (0 = no limit)
 
 ### Ollama Configuration
 - Default model: `mistral`
@@ -116,7 +118,10 @@ EmailAgentStreamlit/
 
 ### Email Processing Modes
 - **Time-based processing** (default): Scans recent emails within time window
-- **Unread-only processing**: Set `PROCESS_UNREAD_ONLY = true` in `.streamlit/secrets.toml` to process all unread emails regardless of age
+- **Unread-only processing**: Set `PROCESS_UNREAD_ONLY = true` in `.streamlit/secrets.toml` to process unread emails regardless of age
+  - Set `UNREAD_MAX_LIMIT = 0` to process ALL unread emails (no limit)
+  - Set `UNREAD_MAX_LIMIT = 50` to process maximum 50 unread emails
+  - Processing mode limits (Deep/Lite/Ultra-Lite) are ignored when processing unread emails
 
 ## 🛡️ Security Notes
 

@@ -2001,8 +2001,14 @@ Keep it under 200 words and focus on actionable style elements.
             
             # Fetch emails based on mode
             if unread_only:
-                print(f"📬 Processing all unread emails (no time limit)...")
-                emails = self.outlook.get_recent_emails(max_results=initial_max, hours_back=72)  # hours_back ignored in unread mode
+                # Get unread-specific limit (0 = no limit)
+                unread_limit = get_config('UNREAD_MAX_LIMIT', 0)
+                if unread_limit > 0:
+                    print(f"📬 Processing up to {unread_limit} unread emails...")
+                    emails = self.outlook.get_recent_emails(max_results=unread_limit, hours_back=72)  # hours_back ignored in unread mode
+                else:
+                    print(f"📬 Processing ALL unread emails (no limit)...")
+                    emails = self.outlook.get_recent_emails(max_results=1000, hours_back=72)  # Large number to get all unread
             else:
                 # First, get recent emails from past 3 days (72 hours) to catch deadline emails
                 print(f"🔍 Scanning past 72 hours for critical emails...")
