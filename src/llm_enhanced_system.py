@@ -1610,7 +1610,7 @@ class LLMEnhancedEmailSystem:
         self.categorizer = SmartCategorizer(self.llm)
         
         # Initialize enhanced context-aware components (inspired by inbox-zero)
-        self.contextual_drafter = ContextualDraftGenerator(self.llm, self.outlook)
+        self.contextual_drafter = None  # Will be initialized after outlook authentication
         self.writing_analyzer = WritingStyleAnalyzer(self.llm)
         self.history_extractor = None  # Will be initialized after outlook authentication
         self.knowledge_base = KnowledgeBase()
@@ -1751,6 +1751,10 @@ Keep it under 200 words and focus on actionable style elements.
     def initialize_enhanced_features(self):
         """Initialize enhanced features after authentication (inspired by inbox-zero)"""
         try:
+            # Initialize contextual drafter after outlook authentication
+            if not self.contextual_drafter:
+                self.contextual_drafter = ContextualDraftGenerator(self.llm, self.outlook)
+            
             # Initialize history extractor after outlook authentication
             if not self.history_extractor:
                 self.history_extractor = EmailHistoryExtractor(self.outlook)
@@ -1778,8 +1782,13 @@ Keep it under 200 words and focus on actionable style elements.
         """Generate enhanced draft with multi-source context (inspired by inbox-zero)"""
         try:
             # Ensure enhanced features are initialized
-            if not self.user_writing_style:
+            if not self.user_writing_style or not self.contextual_drafter:
                 self.initialize_enhanced_features()
+            
+            # Check if contextual drafter is still None after initialization
+            if not self.contextual_drafter:
+                print("⚠️ Contextual drafter not available, falling back to basic draft")
+                return self.drafter.generate_response_draft(email, analysis, "", "")
             
             # Gather context from multiple sources
             email_history = []
