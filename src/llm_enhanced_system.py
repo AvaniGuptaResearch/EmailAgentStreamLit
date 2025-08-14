@@ -2555,10 +2555,35 @@ Keep it under 200 words and focus on actionable style elements.
         # Also check if it's categorized as a meeting or event
         is_meeting_type = analysis.email_type in ['meeting', 'event'] or analysis.action_required == 'attend'
         
+        # Debug: Show what we found
+        print(f"   🔍 Calendar detection for '{email.subject[:40]}...':")
+        print(f"      - Email type: {analysis.email_type}")
+        print(f"      - Action required: {analysis.action_required}")
+        print(f"      - Has meeting keywords: {has_meeting_keywords}")
+        print(f"      - Is meeting type: {is_meeting_type}")
+        
         # Extract time/date information to confirm it's a scheduled event
         import re
-        has_time = bool(re.search(r'\b(?:[01]?[0-9]|2[0-3]):[0-5][0-9]\s*(?:AM|PM|am|pm)?\b', email.body))
-        has_date = bool(re.search(r'(?:january|february|march|april|may|june|july|august|september|october|november|december)\s+\d{1,2}(?:st|nd|rd|th)?', email.body, re.IGNORECASE))
+        
+        # Enhanced time detection patterns
+        time_patterns = [
+            r'\b(?:[01]?[0-9]|2[0-3]):[0-5][0-9]\s*(?:AM|PM|am|pm)?\b',  # 2:30 PM
+            r'\b(?:[01]?[0-9]|2[0-3])-(?:[01]?[0-9]|2[0-3])\s*(?:AM|PM|am|pm)?\b',  # 2-4 PM
+            r'\bbetween\s+(?:[01]?[0-9]|2[0-3])-(?:[01]?[0-9]|2[0-3])\s*(?:AM|PM|am|pm)?\b',  # between 2-4 PM
+            r'\bfrom\s+(?:[01]?[0-9]|2[0-3])\s*(?:AM|PM|am|pm)?\s*to\s*(?:[01]?[0-9]|2[0-3])\s*(?:AM|PM|am|pm)?\b'  # from 2 PM to 4 PM
+        ]
+        
+        # Enhanced date detection patterns
+        date_patterns = [
+            r'(?:january|february|march|april|may|june|july|august|september|october|november|december)\s+\d{1,2}(?:st|nd|rd|th)?',  # July 15th
+            r'\d{1,2}[-/]\d{1,2}[-/]\d{2,4}',  # 7/15/2025
+            r'(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)',  # Monday
+            r'\btomorrow\b|\btoday\b|\bnext\s+week\b|\bthis\s+week\b',  # relative dates
+            r'\d{1,2}(?:st|nd|rd|th)?\s+(?:january|february|march|april|may|june|july|august|september|october|november|december)'  # 15th July
+        ]
+        
+        has_time = any(bool(re.search(pattern, email.body, re.IGNORECASE)) for pattern in time_patterns)
+        has_date = any(bool(re.search(pattern, email.body, re.IGNORECASE)) for pattern in date_patterns)
         
         # Check if email already contains a calendar invitation
         calendar_indicators = [
@@ -2576,9 +2601,15 @@ Keep it under 200 words and focus on actionable style elements.
             return False
         
         # Generate unique event key for this email
-        if has_meeting_keywords and is_meeting_type and (has_time or has_date):
+        # More flexible criteria: meeting keywords + (meeting type OR time/date info)
+        should_create = (has_meeting_keywords and is_meeting_type) or (has_meeting_keywords and (has_time or has_date))
+        
+        if should_create:
             email.event_key = self._generate_event_key(email, analysis)
+            print(f"   📅 Calendar event will be created - Meeting: {has_meeting_keywords}, Type: {is_meeting_type}, Time: {has_time}, Date: {has_date}")
             return True
+        else:
+            print(f"   📅 No calendar event - Meeting: {has_meeting_keywords}, Type: {is_meeting_type}, Time: {has_time}, Date: {has_date}")
         
         return False
     
