@@ -3056,21 +3056,28 @@ Keep it under 200 words and focus on actionable style elements.
             
             # Convert LLM suggestion to calendar event format
             try:
+                print(f"   🔍 Parsing datetime: {meeting_suggestion['date']} at {meeting_suggestion['start_time']}")
                 event_datetime = self._parse_llm_datetime(
                     meeting_suggestion['date'], 
                     meeting_suggestion['start_time']
                 )
+                print(f"   📅 Initial datetime: {event_datetime}")
                 
                 # Check office hours and adjust if needed
+                original_datetime = event_datetime
                 event_datetime = self._adjust_for_office_hours(event_datetime, meeting_suggestion)
+                if event_datetime != original_datetime:
+                    print(f"   ⏰ Adjusted for office hours: {original_datetime} → {event_datetime}")
                 
                 duration_hours = self._calculate_meeting_duration(
                     meeting_suggestion['start_time'], 
                     meeting_suggestion['end_time']
                 )
+                print(f"   ⏱️ Duration: {duration_hours} hours")
                 
                 start_time = event_datetime.isoformat() + 'Z'
                 end_time = (event_datetime + timedelta(hours=duration_hours)).isoformat() + 'Z'
+                print(f"   📅 Final times: {start_time} to {end_time}")
                 
             except Exception as e:
                 print(f"   ⚠️ Could not parse LLM date/time: {e}")
@@ -3158,10 +3165,12 @@ Body: {email.body}
 
 INSTRUCTIONS:
 1. Determine if this email is requesting/suggesting a meeting that should be scheduled
-2. Extract meeting details if applicable
+2. Extract meeting details if applicable - PRESERVE ORIGINAL TIMES EXACTLY
 3. If meeting is outside office hours or on weekend, suggest next business day during office hours
 4. Identify all participants mentioned in the email
 5. Extract or suggest meeting purpose and location
+
+CRITICAL: Use 24-hour format for times. "2-4 PM" = start_time: "14:00", end_time: "16:00"
 
 Respond in this EXACT JSON format:
 {{
@@ -3179,7 +3188,13 @@ Respond in this EXACT JSON format:
     "reasoning": "Why this meeting should/shouldn't be created"
 }}
 
-EXAMPLES:
+TIME CONVERSION EXAMPLES:
+- "2-4 PM" → start_time: "14:00", end_time: "16:00"
+- "9:30 AM" → start_time: "09:30", end_time: "10:30"
+- "11am-12pm" → start_time: "11:00", end_time: "12:00"
+- "1:15-2:45 PM" → start_time: "13:15", end_time: "14:45"
+
+FULL EXAMPLES:
 - "Let's meet Monday 2-4 PM" → should_create_meeting: true, date: next Monday, start_time: "14:00", end_time: "16:00"
 - "Thanks for the update" → should_create_meeting: false
 - "Can we schedule a call this evening?" → should_create_meeting: true, office_hours_adjusted: true (next business day)
@@ -3188,6 +3203,7 @@ EXAMPLES:
         try:
             response = self.llm.call_with_json_parsing(prompt)
             if response and isinstance(response, dict):
+                print(f"   🔍 LLM Response: {response}")  # Debug output
                 return response
             else:
                 print(f"   ⚠️ LLM returned non-dict response for meeting suggestion")
