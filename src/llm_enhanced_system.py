@@ -3035,117 +3035,77 @@ Keep it under 200 words and focus on actionable style elements.
         return analyzed_emails
     
     def _create_calendar_event_from_email(self, email: OutlookEmailData, analysis: LLMAnalysisResult) -> Dict:
-        """Create a calendar event from meeting email details"""
+        """Create a calendar event from meeting email details using LLM"""
         try:
-            # Extract event details using regex patterns
-            import re
             from datetime import datetime, timedelta
             
-            # Enhanced date/time extraction from email content
             email_full_text = email.subject + " " + email.body
-            print(f"   📧 Analyzing email text: {email_full_text[:200]}...")  # Show first 200 chars
+            print(f"   📧 Using LLM to extract meeting details: {email.subject[:50]}...")
             
-            # Extract time with better patterns - prioritize start time from ranges
-            time_patterns = [
-                # Time ranges like "11:00am – 12:00pm" - extract start time
-                r'\b(?:[01]?[0-9]|2[0-3]):[0-5][0-9]\s*(?:AM|PM|am|pm)\s*[–—-]\s*(?:[01]?[0-9]|2[0-3]):[0-5][0-9]\s*(?:AM|PM|am|pm)\b',
-                # Single times like "11:00 AM"
-                r'\b(?:[01]?[0-9]|2[0-3]):[0-5][0-9]\s*(?:AM|PM|am|pm)\b',
-                # 24-hour format
-                r'\b(?:[01]?[0-9]|2[0-3]):[0-5][0-9]\b',
-                # Hour only like "11 AM"
-                r'\b(?:0?[1-9]|1[0-2])\s*(?:AM|PM|am|pm)\b'
-            ]
-            time_found = None
-            for i, pattern in enumerate(time_patterns):
-                match = re.search(pattern, email_full_text)
-                if match:
-                    matched_text = match.group(0)
-                    # If it's a time range (first pattern), extract just the start time
-                    if i == 0:  # Time range pattern
-                        start_time_match = re.search(r'\b(?:[01]?[0-9]|2[0-3]):[0-5][0-9]\s*(?:AM|PM|am|pm)', matched_text)
-                        time_found = start_time_match.group(0) if start_time_match else matched_text
-                        print(f"   ⏰ Extracted start time from range: {matched_text} → {time_found}")
-                    else:
-                        time_found = matched_text
-                        print(f"   ⏰ Extracted time: {time_found}")
-                    break
+            # Use LLM to extract meeting details with structured output
+            meeting_suggestion = self._get_llm_meeting_suggestion(email)
             
-            # Extract date with comprehensive patterns - prioritize specific formats first
-            date_patterns = [
-                # Specific format like "Thursday, Aug 21, 2025" (your exact case)
-                r'(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday),?\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+\d{1,2},?\s+\d{4}',
-                # Full date formats like "Thu 21 Aug 2025"
-                r'(?:mon|tue|wed|thu|fri|sat|sun)[a-z]*\s+\d{1,2}\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+\d{4}',
-                # Month day year like "August 21, 2025" or "21 August 2025"
-                r'(?:january|february|march|april|may|june|july|august|september|october|november|december)\s+\d{1,2}(?:st|nd|rd|th)?(?:,?\s+\d{4})?',
-                r'\d{1,2}\s+(?:january|february|march|april|may|june|july|august|september|october|november|december)\s+\d{4}',
-                # Numeric formats
-                r'\d{1,2}[-/]\d{1,2}[-/]\d{2,4}',
-                # Day of week (for this week/next week) - LOWER PRIORITY
-                r'(?:this|next)?\s*(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)',
-                # Today/tomorrow
-                r'\b(?:today|tomorrow)\b'
-            ]
-            date_found = None
-            for i, pattern in enumerate(date_patterns):
-                match = re.search(pattern, email_full_text, re.IGNORECASE)
-                if match:
-                    date_found = match.group(0)
-                    print(f"   📅 Extracted date (pattern {i+1}): {date_found}")
-                    break
+            if not meeting_suggestion or not meeting_suggestion.get('should_create_meeting'):
+                print(f"   🚫 LLM determined no meeting should be created")
+                return {"success": False, "message": "LLM determined no meeting needed"}
             
-            # Extract location
-            location_patterns = [
-                r'(?:at|in|location:|room:|venue:)\s*([^\n\r.,]+)',
-                r'(?:zoom|teams|meet|webex)\.us/[^\s]+',
-                r'https?://[^\s]+(?:zoom|teams|meet|webex)[^\s]*'
-            ]
-            location = ""
-            for pattern in location_patterns:
-                match = re.search(pattern, email.body, re.IGNORECASE)
-                if match:
-                    location = match.group(0)
-                    break
+            print(f"   🤖 LLM suggested meeting: {meeting_suggestion['title']}")
+            print(f"   📅 Proposed time: {meeting_suggestion['date']} at {meeting_suggestion['start_time']}-{meeting_suggestion['end_time']}")
+            if meeting_suggestion.get('participants'):
+                print(f"   👥 Participants: {', '.join(meeting_suggestion['participants'])}")
             
-            # Parse extracted date and time into proper datetime
+            # Convert LLM suggestion to calendar event format
             try:
-                event_datetime = self._parse_meeting_datetime(date_found, time_found)
-                start_time = event_datetime.isoformat() + 'Z'
-                end_time = (event_datetime + timedelta(hours=1)).isoformat() + 'Z'
+                event_datetime = self._parse_llm_datetime(
+                    meeting_suggestion['date'], 
+                    meeting_suggestion['start_time']
+                )
                 
-                print(f"   📅 Parsed meeting time: {date_found} at {time_found} → {event_datetime}")
+                # Check office hours and adjust if needed
+                event_datetime = self._adjust_for_office_hours(event_datetime, meeting_suggestion)
+                
+                duration_hours = self._calculate_meeting_duration(
+                    meeting_suggestion['start_time'], 
+                    meeting_suggestion['end_time']
+                )
+                
+                start_time = event_datetime.isoformat() + 'Z'
+                end_time = (event_datetime + timedelta(hours=duration_hours)).isoformat() + 'Z'
                 
             except Exception as e:
-                print(f"   ⚠️ Could not parse date/time ({date_found}, {time_found}): {e}")
-                # Fallback to tomorrow with extracted time or default
-                try:
-                    if time_found:
-                        # Try to parse just the time
-                        hour, minute = self._parse_time_string(time_found)
-                        event_date = datetime.now() + timedelta(days=1)
-                        event_datetime = event_date.replace(hour=hour, minute=minute, second=0, microsecond=0)
-                        start_time = event_datetime.isoformat() + 'Z'
-                        end_time = (event_datetime + timedelta(hours=1)).isoformat() + 'Z'
-                        print(f"   📅 Using time {time_found} for tomorrow: {event_datetime}")
-                    else:
-                        # Complete fallback
-                        event_date = datetime.now() + timedelta(days=1)
-                        start_time = event_date.replace(hour=10, minute=0, second=0, microsecond=0).isoformat() + 'Z'
-                        end_time = event_date.replace(hour=11, minute=0, second=0, microsecond=0).isoformat() + 'Z'
-                        print(f"   📅 Using fallback time: tomorrow 10:00 AM")
-                except:
-                    # Final fallback
-                    event_date = datetime.now() + timedelta(days=1)
-                    start_time = event_date.replace(hour=10, minute=0, second=0, microsecond=0).isoformat() + 'Z'
-                    end_time = event_date.replace(hour=11, minute=0, second=0, microsecond=0).isoformat() + 'Z'
-                    print(f"   📅 Using default fallback time: tomorrow 10:00 AM")
+                print(f"   ⚠️ Could not parse LLM date/time: {e}")
+                # Fallback to next business day 2 PM
+                event_datetime = self._get_next_business_day_time(14, 0)  # 2 PM
+                start_time = event_datetime.isoformat() + 'Z'
+                end_time = (event_datetime + timedelta(hours=2)).isoformat() + 'Z'
+            
+            # Create enhanced description with participants and context
+            participants = meeting_suggestion.get('participants', [])
+            location = meeting_suggestion.get('location', '')
+            
+            description = f"""📧 Meeting created from email: {email.subject}
+            
+👤 Original organizer: {email.sender} ({email.sender_email})
+📅 Auto-created for personal calendar tracking
+
+👥 Meeting participants (DO NOT SEND INVITES - PERSONAL TRACKING ONLY):
+{chr(10).join([f"   • {participant}" for participant in participants]) if participants else "   • No specific participants mentioned"}
+
+🎯 Meeting purpose: {meeting_suggestion.get('purpose', 'General discussion')}
+📝 Notes: {meeting_suggestion.get('notes', 'Meeting details extracted from email')}
+
+📧 Original email content:
+{email.body[:500]}{'...' if len(email.body) > 500 else ''}
+
+⚠️ IMPORTANT: This is a PERSONAL calendar entry only. 
+No invitations have been sent to other participants.
+You may need to send meeting invitations manually if required."""
             
             event_details = {
-                'subject': f"Meeting: {email.subject}",
+                'subject': meeting_suggestion.get('title', f"Meeting: {email.subject}"),
                 'start_time': start_time,
                 'end_time': end_time,
-                'description': f"Meeting details from email:\n\nFrom: {email.sender} ({email.sender_email})\nSubject: {email.subject}\n\nEmail content:\n{email.body[:500]}",
+                'description': description,
                 'location': location,
                 'attendees': []  # TESTING MODE: No attendees, personal calendar only
             }
@@ -3176,6 +3136,146 @@ Keep it under 200 words and focus on actionable style elements.
                 "error": str(e),
                 "message": f"Failed to create calendar event: {str(e)}"
             }
+    
+    def _get_llm_meeting_suggestion(self, email: OutlookEmailData) -> dict:
+        """Use LLM to extract meeting details with structured output"""
+        
+        current_date = datetime.now().strftime("%A, %B %d, %Y")
+        current_time = datetime.now().strftime("%I:%M %p")
+        
+        prompt = f"""
+You are a meeting scheduling assistant. Analyze the following email and determine if a calendar event should be created.
+
+CURRENT CONTEXT:
+- Today: {current_date}
+- Current time: {current_time}
+- Office hours: 9:00 AM - 6:00 PM, Monday-Friday
+
+EMAIL TO ANALYZE:
+Subject: {email.subject}
+From: {email.sender} ({email.sender_email})
+Body: {email.body}
+
+INSTRUCTIONS:
+1. Determine if this email is requesting/suggesting a meeting that should be scheduled
+2. Extract meeting details if applicable
+3. If meeting is outside office hours or on weekend, suggest next business day during office hours
+4. Identify all participants mentioned in the email
+5. Extract or suggest meeting purpose and location
+
+Respond in this EXACT JSON format:
+{{
+    "should_create_meeting": true/false,
+    "title": "Meeting title/subject",
+    "date": "YYYY-MM-DD",
+    "start_time": "HH:MM",
+    "end_time": "HH:MM", 
+    "participants": ["Dr. Ramzi", "Avani Gupta", "etc"],
+    "location": "location if mentioned or suggested",
+    "purpose": "Brief description of meeting purpose",
+    "notes": "Additional notes or context",
+    "office_hours_adjusted": true/false,
+    "confidence": 0.0-1.0,
+    "reasoning": "Why this meeting should/shouldn't be created"
+}}
+
+EXAMPLES:
+- "Let's meet Monday 2-4 PM" → should_create_meeting: true, date: next Monday, start_time: "14:00", end_time: "16:00"
+- "Thanks for the update" → should_create_meeting: false
+- "Can we schedule a call this evening?" → should_create_meeting: true, office_hours_adjusted: true (next business day)
+"""
+        
+        try:
+            response = self.llm_service.call_with_json_parsing(prompt)
+            if response and isinstance(response, dict):
+                return response
+            else:
+                print(f"   ⚠️ LLM returned non-dict response for meeting suggestion")
+                return {"should_create_meeting": False, "reasoning": "Invalid LLM response"}
+        except Exception as e:
+            print(f"   ❌ Error getting LLM meeting suggestion: {e}")
+            return {"should_create_meeting": False, "reasoning": f"Error: {str(e)}"}
+    
+    def _parse_llm_datetime(self, date_str: str, time_str: str) -> datetime:
+        """Parse LLM-provided date and time into datetime object"""
+        from datetime import datetime
+        import re
+        
+        # Parse date (YYYY-MM-DD format expected from LLM)
+        try:
+            date_parts = date_str.split('-')
+            year, month, day = int(date_parts[0]), int(date_parts[1]), int(date_parts[2])
+        except:
+            # Fallback to next business day
+            today = datetime.now()
+            days_ahead = 1 if today.weekday() < 4 else (7 - today.weekday())  # Next weekday
+            target_date = today + timedelta(days=days_ahead)
+            year, month, day = target_date.year, target_date.month, target_date.day
+        
+        # Parse time (HH:MM format expected from LLM) 
+        try:
+            time_parts = time_str.split(':')
+            hour, minute = int(time_parts[0]), int(time_parts[1])
+        except:
+            hour, minute = 14, 0  # Default to 2 PM
+        
+        return datetime(year, month, day, hour, minute)
+    
+    def _adjust_for_office_hours(self, event_datetime: datetime, meeting_suggestion: dict) -> datetime:
+        """Adjust meeting time if outside office hours"""
+        
+        # Office hours: 9 AM - 6 PM, Monday-Friday
+        if event_datetime.weekday() >= 5:  # Weekend
+            # Move to next Monday
+            days_ahead = 7 - event_datetime.weekday() + 1
+            event_datetime = event_datetime + timedelta(days=days_ahead)
+            event_datetime = event_datetime.replace(hour=14, minute=0)  # 2 PM default
+            print(f"   ⏰ Moved weekend meeting to next Monday 2:00 PM")
+        
+        elif event_datetime.hour < 9:  # Before office hours
+            event_datetime = event_datetime.replace(hour=9, minute=0)
+            print(f"   ⏰ Moved early meeting to 9:00 AM")
+        
+        elif event_datetime.hour >= 18:  # After office hours
+            # Move to next business day
+            event_datetime = event_datetime + timedelta(days=1)
+            if event_datetime.weekday() >= 5:  # If that's weekend, move to Monday
+                days_ahead = 7 - event_datetime.weekday() + 1
+                event_datetime = event_datetime + timedelta(days=days_ahead)
+            event_datetime = event_datetime.replace(hour=9, minute=0)
+            print(f"   ⏰ Moved after-hours meeting to next business day 9:00 AM")
+        
+        return event_datetime
+    
+    def _calculate_meeting_duration(self, start_time: str, end_time: str) -> float:
+        """Calculate meeting duration in hours"""
+        try:
+            start_parts = start_time.split(':')
+            end_parts = end_time.split(':')
+            
+            start_hour = int(start_parts[0]) + int(start_parts[1]) / 60
+            end_hour = int(end_parts[0]) + int(end_parts[1]) / 60
+            
+            duration = end_hour - start_hour
+            return max(duration, 1.0)  # Minimum 1 hour
+        except:
+            return 2.0  # Default 2 hours
+    
+    def _get_next_business_day_time(self, hour: int, minute: int) -> datetime:
+        """Get next business day at specified time"""
+        today = datetime.now()
+        days_ahead = 1
+        
+        # If today is Friday, go to Monday
+        if today.weekday() == 4:  # Friday
+            days_ahead = 3
+        elif today.weekday() == 5:  # Saturday  
+            days_ahead = 2
+        elif today.weekday() == 6:  # Sunday
+            days_ahead = 1
+        
+        next_day = today + timedelta(days=days_ahead)
+        return next_day.replace(hour=hour, minute=minute, second=0, microsecond=0)
 
 class WritingStyleAnalyzer:
     """Analyzes user's writing style from sent emails (inspired by inbox-zero)"""
