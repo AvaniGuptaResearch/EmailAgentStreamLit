@@ -3186,7 +3186,7 @@ EXAMPLES:
 """
         
         try:
-            response = self.llm_service.call_with_json_parsing(prompt)
+            response = self.llm.call_with_json_parsing(prompt)
             if response and isinstance(response, dict):
                 return response
             else:
