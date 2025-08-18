@@ -2578,6 +2578,7 @@ Keep it under 200 words and focus on actionable style elements.
             r'(?:january|february|march|april|may|june|july|august|september|october|november|december)\s+\d{1,2}(?:st|nd|rd|th)?',  # July 15th
             r'\d{1,2}[-/]\d{1,2}[-/]\d{2,4}',  # 7/15/2025
             r'(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)',  # Monday
+            r'\b(?:mon|tue|wed|thu|fri|sat|sun)\b',  # Mon, Tue, etc.
             r'\btomorrow\b|\btoday\b|\bnext\s+week\b|\bthis\s+week\b',  # relative dates
             r'\d{1,2}(?:st|nd|rd|th)?\s+(?:january|february|march|april|may|june|july|august|september|october|november|december)'  # 15th July
         ]
@@ -2772,6 +2773,22 @@ Keep it under 200 words and focus on actionable style elements.
                 # Keyword-based analysis only
                 analysis = self._create_minimal_analysis(email)
                 
+                # Calendar Event Creation (even in ultra-lite mode for meeting emails)
+                calendar_event = None
+                if self._should_create_calendar_event(email, analysis) and analysis.priority_score > 40:
+                    calendar_event = self._create_calendar_event_from_email(email, analysis)
+                    
+                    # Update email with calendar event status
+                    if calendar_event:
+                        if calendar_event.get('success'):
+                            email.created_calendar_event_id = calendar_event.get('event_id')
+                            email.calendar_event_status = "created"
+                        elif calendar_event.get('duplicate'):
+                            email.created_calendar_event_id = calendar_event.get('existing_event_id')
+                            email.calendar_event_status = "duplicate"
+                        else:
+                            email.calendar_event_status = "failed"
+                
                 # Update email with minimal analysis
                 email.priority_score = analysis.priority_score
                 email.urgency_level = analysis.urgency_level
@@ -2788,7 +2805,7 @@ Keep it under 200 words and focus on actionable style elements.
                     'smart_category': None,
                     'cold_analysis': None,
                     'automation_actions': [],
-                    'calendar_event': None
+                    'calendar_event': calendar_event
                 }
                 
                 analyzed_emails.append((email, enhanced_analysis))
@@ -2820,6 +2837,22 @@ Keep it under 200 words and focus on actionable style elements.
                 # Quick categorization
                 email_category = self.categorizer.categorize_email(email, analysis)
                 
+                # Calendar Event Creation (for meeting emails with time info)
+                calendar_event = None
+                if self._should_create_calendar_event(email, analysis) and analysis.priority_score > 40:
+                    calendar_event = self._create_calendar_event_from_email(email, analysis)
+                    
+                    # Update email with calendar event status
+                    if calendar_event:
+                        if calendar_event.get('success'):
+                            email.created_calendar_event_id = calendar_event.get('event_id')
+                            email.calendar_event_status = "created"
+                        elif calendar_event.get('duplicate'):
+                            email.created_calendar_event_id = calendar_event.get('existing_event_id')
+                            email.calendar_event_status = "duplicate"
+                        else:
+                            email.calendar_event_status = "failed"
+                
                 # Update email with LLM analysis
                 email.priority_score = analysis.priority_score
                 email.urgency_level = analysis.urgency_level
@@ -2836,7 +2869,7 @@ Keep it under 200 words and focus on actionable style elements.
                     'smart_category': None,
                     'cold_analysis': None,
                     'automation_actions': [],
-                    'calendar_event': None
+                    'calendar_event': calendar_event
                 }
                 
                 analyzed_emails.append((email, enhanced_analysis))
