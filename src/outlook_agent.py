@@ -1068,14 +1068,14 @@ class OutlookService:
             from datetime import datetime
             import pytz
             
-            # Ensure target_start is timezone-aware
+            # Parse target datetime - handle both timezone-aware and naive formats
             if start_time.endswith('Z'):
                 target_start = datetime.fromisoformat(start_time.replace('Z', '+00:00'))
-            elif '+' in start_time or start_time.endswith('00:00'):
+            elif '+' in start_time and ('00:00' in start_time or ':' in start_time.split('+')[1]):
                 target_start = datetime.fromisoformat(start_time)
             else:
-                # If no timezone info, assume UTC
-                target_start = datetime.fromisoformat(start_time).replace(tzinfo=pytz.UTC)
+                # If no timezone info, parse as naive datetime
+                target_start = datetime.fromisoformat(start_time)
             
             print(f"   Target datetime: {target_start}")
             
@@ -1092,14 +1092,20 @@ class OutlookService:
                     continue
                 
                 try:
-                    # Parse event start time - ensure it's timezone-aware
+                    # Parse event start time - handle both timezone-aware and naive formats
                     if event_start_str.endswith('Z'):
                         event_start = datetime.fromisoformat(event_start_str.replace('Z', '+00:00'))
-                    elif '+' in event_start_str or event_start_str.endswith('00:00'):
+                        # Convert to naive datetime for comparison
+                        if target_start.tzinfo is None:
+                            event_start = event_start.replace(tzinfo=None)
+                    elif '+' in event_start_str and ('00:00' in event_start_str or ':' in event_start_str.split('+')[1]):
                         event_start = datetime.fromisoformat(event_start_str)
+                        # Convert to naive datetime for comparison
+                        if target_start.tzinfo is None:
+                            event_start = event_start.replace(tzinfo=None)
                     else:
-                        # If no timezone info, assume UTC
-                        event_start = datetime.fromisoformat(event_start_str).replace(tzinfo=pytz.UTC)
+                        # Parse as naive datetime
+                        event_start = datetime.fromisoformat(event_start_str.split('.')[0])  # Remove microseconds if present
                     
                     # Check for duplicates based on:
                     # 1. Similar subject (better matching for long academic titles)
