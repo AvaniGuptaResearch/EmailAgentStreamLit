@@ -3075,16 +3075,18 @@ Keep it under 200 words and focus on actionable style elements.
                 )
                 print(f"   ⏱️ Duration: {duration_hours} hours")
                 
-                start_time = event_datetime.isoformat() + 'Z'
-                end_time = (event_datetime + timedelta(hours=duration_hours)).isoformat() + 'Z'
-                print(f"   📅 Final times: {start_time} to {end_time}")
+                # Create times for Asia/Dubai timezone (UTC+4) 
+                start_time = event_datetime.isoformat()
+                end_time = (event_datetime + timedelta(hours=duration_hours)).isoformat()
+                print(f"   📅 Final times (Asia/Dubai): {start_time} to {end_time}")
                 
             except Exception as e:
                 print(f"   ⚠️ Could not parse LLM date/time: {e}")
                 # Fallback to next business day 2 PM
                 event_datetime = self._get_next_business_day_time(14, 0)  # 2 PM
-                start_time = event_datetime.isoformat() + 'Z'
-                end_time = (event_datetime + timedelta(hours=2)).isoformat() + 'Z'
+                start_time = event_datetime.isoformat()
+                end_time = (event_datetime + timedelta(hours=2)).isoformat()
+                print(f"   📅 Fallback times (Asia/Dubai): {start_time} to {end_time}")
             
             # Create enhanced description with participants and context
             participants = meeting_suggestion.get('participants', [])

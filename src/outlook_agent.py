@@ -1222,11 +1222,11 @@ class OutlookService:
                 },
                 "start": {
                     "dateTime": start_time,
-                    "timeZone": "UTC"
+                    "timeZone": "Asia/Dubai"  # UTC+4 timezone for UAE
                 },
                 "end": {
                     "dateTime": end_time,
-                    "timeZone": "UTC"
+                    "timeZone": "Asia/Dubai"  # UTC+4 timezone for UAE
                 },
                 "location": {
                     "displayName": location
