@@ -234,6 +234,38 @@ def main():
         else:
             st.warning("⚠️ Initialize system first")
     
+    # Persistent Priority Summary
+    if st.session_state.llm_system:
+        try:
+            priority_summary = st.session_state.llm_system.get_persistent_priority_summary()
+            if priority_summary['total_emails'] > 0:
+                st.subheader("📊 Session Email Summary")
+                col1, col2, col3, col4 = st.columns(4)
+                
+                with col1:
+                    st.metric("Total Analyzed", priority_summary['total_emails'])
+                with col2:
+                    st.metric("Avg Priority", f"{priority_summary['avg_priority']:.1f}")
+                with col3:
+                    st.metric("High Priority", priority_summary['high_priority_count'])
+                with col4:
+                    critical_count = priority_summary['priorities_by_range']['critical_90_plus']
+                    st.metric("Critical", critical_count)
+                
+                # Priority distribution
+                if priority_summary['total_emails'] > 1:
+                    st.subheader("📈 Priority Distribution")
+                    ranges = priority_summary['priorities_by_range']
+                    priority_data = {
+                        'Priority Range': ['Critical (90+)', 'High (70-89)', 'Medium (50-69)', 'Low (<50)'],
+                        'Count': [ranges['critical_90_plus'], ranges['high_70_89'], 
+                                ranges['medium_50_69'], ranges['low_below_50']]
+                    }
+                    priority_df = pd.DataFrame(priority_data)
+                    st.bar_chart(priority_df.set_index('Priority Range'))
+        except Exception as e:
+            pass  # Silently handle any errors in priority summary display
+    
     # Output section (no duplicate display)
     if not st.session_state.output:
         st.info("💡 Click 'Process Emails' to start email analysis")

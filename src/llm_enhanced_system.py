@@ -1666,6 +1666,9 @@ class LLMEnhancedEmailSystem:
             tenant_id=get_config('AZURE_TENANT_ID', 'common')
         )
         
+        # Initialize session state persistence
+        self._initialize_session_persistence()
+        
         # Stats
         self.emails_analyzed = 0
         self.drafts_created = 0
@@ -1702,6 +1705,92 @@ class LLMEnhancedEmailSystem:
             "deep": "🔬 DEEP MODE"
         }
         return mode_names[self.processing_mode]
+    
+    def _initialize_session_persistence(self):
+        """Initialize session state persistence for email analysis results"""
+        import streamlit as st
+        
+        # Initialize session state keys for persistence
+        if 'email_analysis_results' not in st.session_state:
+            st.session_state.email_analysis_results = {}
+        if 'email_priorities' not in st.session_state:
+            st.session_state.email_priorities = {}
+        if 'email_drafts' not in st.session_state:
+            st.session_state.email_drafts = {}
+        if 'calendar_confirmations' not in st.session_state:
+            st.session_state.calendar_confirmations = {}
+    
+    def _save_email_analysis(self, email: 'OutlookEmailData', analysis: LLMAnalysisResult, draft: LLMDraftResult = None):
+        """Save email analysis results to session state"""
+        import streamlit as st
+        
+        email_key = f"{email.message_id}_{email.sender_email}"
+        
+        # Save analysis results
+        st.session_state.email_analysis_results[email_key] = {
+            'subject': email.subject,
+            'sender': email.sender,
+            'sender_email': email.sender_email,
+            'date': email.date,
+            'priority_score': analysis.priority_score,
+            'urgency_level': analysis.urgency_level,
+            'email_type': analysis.email_type,
+            'action_required': analysis.action_required,
+            'should_reply': analysis.should_reply,
+            'key_points': analysis.key_points,
+            'deadline_info': analysis.deadline_info,
+            'timestamp': datetime.now().isoformat()
+        }
+        
+        # Save priority
+        st.session_state.email_priorities[email_key] = analysis.priority_score
+        
+        # Save draft if available
+        if draft:
+            st.session_state.email_drafts[email_key] = {
+                'subject': draft.subject,
+                'body': draft.body,
+                'tone': draft.tone,
+                'confidence': draft.confidence,
+                'reasoning': draft.reasoning,
+                'timestamp': datetime.now().isoformat()
+            }
+    
+    def _load_saved_analysis(self, email: 'OutlookEmailData') -> Optional[Dict]:
+        """Load saved analysis results from session state"""
+        import streamlit as st
+        
+        email_key = f"{email.message_id}_{email.sender_email}"
+        return st.session_state.email_analysis_results.get(email_key)
+    
+    def _load_saved_draft(self, email: 'OutlookEmailData') -> Optional[Dict]:
+        """Load saved draft from session state"""
+        import streamlit as st
+        
+        email_key = f"{email.message_id}_{email.sender_email}"
+        return st.session_state.email_drafts.get(email_key)
+    
+    def get_persistent_priority_summary(self) -> Dict[str, Any]:
+        """Get summary of all persistent priorities for display"""
+        import streamlit as st
+        
+        if not st.session_state.email_priorities:
+            return {'total_emails': 0, 'avg_priority': 0, 'high_priority_count': 0}
+        
+        priorities = list(st.session_state.email_priorities.values())
+        high_priority_count = sum(1 for p in priorities if p >= 70)
+        
+        return {
+            'total_emails': len(priorities),
+            'avg_priority': sum(priorities) / len(priorities),
+            'high_priority_count': high_priority_count,
+            'priorities_by_range': {
+                'critical_90_plus': sum(1 for p in priorities if p >= 90),
+                'high_70_89': sum(1 for p in priorities if 70 <= p < 90),
+                'medium_50_69': sum(1 for p in priorities if 50 <= p < 70),
+                'low_below_50': sum(1 for p in priorities if p < 50)
+            }
+        }
     
     # Legacy method for backward compatibility
     def set_lite_mode(self, enabled: bool = True):
@@ -2363,6 +2452,9 @@ Keep it under 200 words and focus on actionable style elements.
                 draft = self.generate_contextual_draft(email, analysis)
                 # Note: LLM calls are tracked within generate_contextual_draft
                 
+                # Update session state with draft information
+                self._save_email_analysis(email, analysis, draft)
+                
                 print(f"   🤖 LLM Draft Generated:")
                 print(f"   📧 Subject: {draft.subject}")
                 print(f"   🎯 Tone: {draft.tone}")
@@ -2543,6 +2635,18 @@ Keep it under 200 words and focus on actionable style elements.
     
     def _should_create_calendar_event(self, email: OutlookEmailData, analysis: LLMAnalysisResult) -> bool:
         """Determine if a calendar event should be created for this email"""
+        # Check if calendar invites are enabled via environment variable
+        import streamlit as st
+        
+        # Check environment variable for calendar invite functionality
+        enable_calendar = True
+        if hasattr(st, 'secrets') and 'ENABLE_CALENDAR_INVITES' in st.secrets:
+            enable_calendar = st.secrets['ENABLE_CALENDAR_INVITES']
+        
+        if not enable_calendar:
+            print(f"   📅 Calendar invites disabled by ENABLE_CALENDAR_INVITES setting")
+            return False
+        
         # Create calendar events for meeting invitations and events
         meeting_indicators = [
             'meeting', 'schedule', 'appointment', 'calendar', 'invite', 'invitation',
@@ -2613,6 +2717,67 @@ Keep it under 200 words and focus on actionable style elements.
             print(f"   📅 No calendar event - Meeting: {has_meeting_keywords}, Type: {is_meeting_type}, Time: {has_time}, Date: {has_date}")
         
         return False
+    
+    def _should_ask_calendar_confirmation(self) -> bool:
+        """Check if user confirmation is required before creating calendar events"""
+        import streamlit as st
+        
+        require_confirmation = True  # Default to asking for confirmation
+        if hasattr(st, 'secrets') and 'REQUIRE_CALENDAR_CONFIRMATION' in st.secrets:
+            require_confirmation = st.secrets['REQUIRE_CALENDAR_CONFIRMATION']
+        
+        return require_confirmation
+    
+    def _ask_calendar_confirmation(self, email: OutlookEmailData, analysis: LLMAnalysisResult) -> bool:
+        """Ask user for confirmation before creating a calendar event"""
+        import streamlit as st
+        
+        # Create a unique key for this email's confirmation
+        confirmation_key = f"calendar_confirm_{email.message_id}"
+        
+        # Display email details for confirmation
+        st.write("---")
+        st.write(f"📧 **Calendar Event Creation Confirmation**")
+        st.write(f"**Email:** {email.subject}")
+        st.write(f"**From:** {email.sender} ({email.sender_email})")
+        st.write(f"**Priority:** {analysis.priority_score:.1f}/100")
+        st.write(f"**Type:** {analysis.email_type}")
+        
+        # Show preview of email content
+        preview_text = email.body[:200] + "..." if len(email.body) > 200 else email.body
+        st.write(f"**Content Preview:** {preview_text}")
+        
+        # Ask for confirmation
+        col1, col2 = st.columns([1, 1])
+        
+        with col1:
+            create_event = st.button(
+                f"✅ Create Calendar Event",
+                key=f"{confirmation_key}_yes",
+                help="Create a personal calendar event for this email"
+            )
+        
+        with col2:
+            skip_event = st.button(
+                f"❌ Skip Calendar Event", 
+                key=f"{confirmation_key}_no",
+                help="Skip creating a calendar event for this email"
+            )
+        
+        # Store the user's decision in session state
+        if create_event:
+            st.session_state[confirmation_key] = True
+            return True
+        elif skip_event:
+            st.session_state[confirmation_key] = False
+            return False
+        
+        # Check if decision was made previously
+        if confirmation_key in st.session_state:
+            return st.session_state[confirmation_key]
+        
+        # No decision made yet, return None to indicate waiting for input
+        return None
     
     def _generate_event_key(self, email: OutlookEmailData, analysis: LLMAnalysisResult) -> str:
         """Generate a unique key for event deduplication based on email content"""
@@ -2776,7 +2941,17 @@ Keep it under 200 words and focus on actionable style elements.
                 # Calendar Event Creation (even in ultra-lite mode for meeting emails)
                 calendar_event = None
                 if self._should_create_calendar_event(email, analysis) and analysis.priority_score > 40:
-                    calendar_event = self._create_calendar_event_from_email(email, analysis)
+                    # Check if user confirmation is required
+                    if self._should_ask_calendar_confirmation():
+                        confirmation = self._ask_calendar_confirmation(email, analysis)
+                        if confirmation is True:
+                            calendar_event = self._create_calendar_event_from_email(email, analysis)
+                        elif confirmation is False:
+                            print(f"   📅 User declined calendar event creation for: {email.subject}")
+                        # If confirmation is None, we're still waiting for user input
+                    else:
+                        # Create calendar event without confirmation
+                        calendar_event = self._create_calendar_event_from_email(email, analysis)
                     
                     # Update email with calendar event status
                     if calendar_event:
@@ -2834,13 +3009,26 @@ Keep it under 200 words and focus on actionable style elements.
                 # Core LLM Analysis only
                 analysis = self.analyzer.analyze_email(email, user_context, thread_context)
                 
+                # Save analysis to session state for persistence
+                self._save_email_analysis(email, analysis)
+                
                 # Quick categorization
                 email_category = self.categorizer.categorize_email(email, analysis)
                 
                 # Calendar Event Creation (for meeting emails with time info)
                 calendar_event = None
                 if self._should_create_calendar_event(email, analysis) and analysis.priority_score > 40:
-                    calendar_event = self._create_calendar_event_from_email(email, analysis)
+                    # Check if user confirmation is required
+                    if self._should_ask_calendar_confirmation():
+                        confirmation = self._ask_calendar_confirmation(email, analysis)
+                        if confirmation is True:
+                            calendar_event = self._create_calendar_event_from_email(email, analysis)
+                        elif confirmation is False:
+                            print(f"   📅 User declined calendar event creation for: {email.subject}")
+                        # If confirmation is None, we're still waiting for user input
+                    else:
+                        # Create calendar event without confirmation
+                        calendar_event = self._create_calendar_event_from_email(email, analysis)
                     
                     # Update email with calendar event status
                     if calendar_event:
@@ -2952,6 +3140,9 @@ Keep it under 200 words and focus on actionable style elements.
                 # Step 4a: Core LLM Analysis
                 analysis = self.analyzer.analyze_email(email, user_context, thread_context)
                 
+                # Save analysis to session state for persistence
+                self._save_email_analysis(email, analysis)
+                
                 # Step 4b: Security Analysis (lightweight)
                 security_analysis = self.security_analyzer.analyze_security(email)
                 
@@ -2991,7 +3182,17 @@ Keep it under 200 words and focus on actionable style elements.
                 # Step 4j: Calendar Event Creation (only for meeting emails with time info)
                 calendar_event = None
                 if self._should_create_calendar_event(email, analysis) and analysis.priority_score > 40:
-                    calendar_event = self._create_calendar_event_from_email(email, analysis)
+                    # Check if user confirmation is required
+                    if self._should_ask_calendar_confirmation():
+                        confirmation = self._ask_calendar_confirmation(email, analysis)
+                        if confirmation is True:
+                            calendar_event = self._create_calendar_event_from_email(email, analysis)
+                        elif confirmation is False:
+                            print(f"   📅 User declined calendar event creation for: {email.subject}")
+                        # If confirmation is None, we're still waiting for user input
+                    else:
+                        # Create calendar event without confirmation
+                        calendar_event = self._create_calendar_event_from_email(email, analysis)
                     
                     # Update email with calendar event status
                     if calendar_event:
