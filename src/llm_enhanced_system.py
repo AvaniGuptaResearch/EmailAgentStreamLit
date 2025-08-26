@@ -1724,7 +1724,7 @@ class LLMEnhancedEmailSystem:
         """Save email analysis results to session state"""
         import streamlit as st
         
-        email_key = f"{email.message_id}_{email.sender_email}"
+        email_key = f"{email.id}_{email.sender_email}"
         
         # Save analysis results
         st.session_state.email_analysis_results[email_key] = {
@@ -1760,14 +1760,14 @@ class LLMEnhancedEmailSystem:
         """Load saved analysis results from session state"""
         import streamlit as st
         
-        email_key = f"{email.message_id}_{email.sender_email}"
+        email_key = f"{email.id}_{email.sender_email}"
         return st.session_state.email_analysis_results.get(email_key)
     
     def _load_saved_draft(self, email: 'OutlookEmailData') -> Optional[Dict]:
         """Load saved draft from session state"""
         import streamlit as st
         
-        email_key = f"{email.message_id}_{email.sender_email}"
+        email_key = f"{email.id}_{email.sender_email}"
         return st.session_state.email_drafts.get(email_key)
     
     def get_persistent_priority_summary(self) -> Dict[str, Any]:
@@ -2733,7 +2733,7 @@ Keep it under 200 words and focus on actionable style elements.
         import streamlit as st
         
         # Create a unique key for this email's confirmation
-        confirmation_key = f"calendar_confirm_{email.message_id}"
+        confirmation_key = f"calendar_confirm_{email.id}"
         
         # Display email details for confirmation
         st.write("---")
