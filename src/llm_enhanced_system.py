@@ -277,7 +277,10 @@ class UnifiedLLMService:
             "options": {
                 "temperature": temperature,
                 "num_predict": max_tokens,
-                "stop": ["Human:", "Assistant:", "###", "\n\n\n", "---"],
+                "stop": ["Human:", "Assistant:", "###", "
+
+
+", "---"],
                 "top_k": 40,
                 "top_p": 0.9,
                 "repeat_penalty": 1.1
@@ -734,7 +737,11 @@ class EmailTemplateManager:
                 name="Meeting Accept",
                 category="meetings",
                 subject_template="Re: {original_subject}",
-                body_template="Hi {sender_name},\n\nI can attend the meeting on {meeting_date} at {meeting_time}. I'll add it to my calendar.\n\nLooking forward to it.",
+                body_template="Hi {sender_name},
+
+I can attend the meeting on {meeting_date} at {meeting_time}. I'll add it to my calendar.
+
+Looking forward to it.",
                 tone="professional",
                 use_cases=["meeting invitation", "calendar request"],
                 variables=["sender_name", "meeting_date", "meeting_time"]
@@ -743,7 +750,11 @@ class EmailTemplateManager:
                 name="Meeting Decline",
                 category="meetings", 
                 subject_template="Re: {original_subject}",
-                body_template="Hi {sender_name},\n\nUnfortunately, I have a conflict and won't be able to attend the meeting on {meeting_date}. Could we reschedule to another time?\n\nPlease let me know what works for you.",
+                body_template="Hi {sender_name},
+
+Unfortunately, I have a conflict and won't be able to attend the meeting on {meeting_date}. Could we reschedule to another time?
+
+Please let me know what works for you.",
                 tone="professional",
                 use_cases=["meeting invitation", "calendar conflict"],
                 variables=["sender_name", "meeting_date"]
@@ -752,7 +763,9 @@ class EmailTemplateManager:
                 name="Quick Acknowledgment",
                 category="general",
                 subject_template="Re: {original_subject}",
-                body_template="Hi {sender_name},\n\nThank you for your email. I've received it and will review the details. I'll get back to you by {response_deadline}.",
+                body_template="Hi {sender_name},
+
+Thank you for your email. I've received it and will review the details. I'll get back to you by {response_deadline}.",
                 tone="professional",
                 use_cases=["acknowledgment", "buying time"],
                 variables=["sender_name", "response_deadline"]
@@ -761,7 +774,14 @@ class EmailTemplateManager:
                 name="Request More Info",
                 category="general",
                 subject_template="Re: {original_subject} - Need Additional Information",
-                body_template="Hi {sender_name},\n\nThank you for reaching out. To better assist you, could you please provide:\n\n• {info_needed_1}\n• {info_needed_2}\n\nOnce I have this information, I'll be able to help you more effectively.",
+                body_template="Hi {sender_name},
+
+Thank you for reaching out. To better assist you, could you please provide:
+
+• {info_needed_1}
+• {info_needed_2}
+
+Once I have this information, I'll be able to help you more effectively.",
                 tone="professional",
                 use_cases=["clarification", "information request"],
                 variables=["sender_name", "info_needed_1", "info_needed_2"]
@@ -770,7 +790,11 @@ class EmailTemplateManager:
                 name="Out of Office Reply",
                 category="automated",
                 subject_template="Out of Office: Re: {original_subject}",
-                body_template="Hi {sender_name},\n\nI'm currently out of the office and will return on {return_date}. I'll respond to your email when I'm back.\n\nFor urgent matters, please contact {backup_contact}.",
+                body_template="Hi {sender_name},
+
+I'm currently out of the office and will return on {return_date}. I'll respond to your email when I'm back.
+
+For urgent matters, please contact {backup_contact}.",
                 tone="professional",
                 use_cases=["vacation", "out of office"],
                 variables=["sender_name", "return_date", "backup_contact"]
@@ -779,7 +803,11 @@ class EmailTemplateManager:
                 name="Task Completion",
                 category="updates",
                 subject_template="Completed: {task_name}",
-                body_template="Hi {sender_name},\n\nI've completed {task_name} as requested. {completion_details}\n\nPlease let me know if you need anything else.",
+                body_template="Hi {sender_name},
+
+I've completed {task_name} as requested. {completion_details}
+
+Please let me know if you need anything else.",
                 tone="professional",
                 use_cases=["task update", "completion notification"],
                 variables=["sender_name", "task_name", "completion_details"]
@@ -818,7 +846,10 @@ class EmailTemplateManager:
             subject = subject.replace(f"{{{var}}}", value)
             body = body.replace(f"{{{var}}}", value)
         
-        return f"Subject: {subject}\n\nBody:\n{body}"
+        return f"Subject: {subject}
+
+Body:
+{body}"
 
 class FollowUpTracker:
     """Tracks emails that need follow-up"""
@@ -1293,7 +1324,9 @@ EXAMPLE: If the sender name is "John Smith", your response should start with "Hi
 
 {{
     "subject": "Re: [original subject]", 
-    "body": "Hi {email.sender.split()[0] if email.sender else 'there'},\\n\\nThank you for reminding us about the deadline. We are working on the modules and will ensure timely submission through the portal.",
+    "body": "Hi {email.sender.split()[0] if email.sender else 'there'},\
+\
+Thank you for reminding us about the deadline. We are working on the modules and will ensure timely submission through the portal.",
     "tone": "professional",
     "confidence": 0.9,
     "reasoning": "Acknowledging deadline and providing action plan",
@@ -1436,7 +1469,8 @@ CRITICAL REQUIREMENTS:
                 return content
         
         # Strategy 4: Try to reconstruct from partial JSON
-        lines = response.split('\n')
+        lines = response.split('
+')
         json_lines = []
         in_json = False
         
@@ -1450,7 +1484,8 @@ CRITICAL REQUIREMENTS:
                     break
         
         if json_lines:
-            return '\n'.join(json_lines)
+            return '
+'.join(json_lines)
         
         # Strategy 5: Simple fallback - try to build minimal JSON from response content
         if "Re:" in response and any(word in response.lower() for word in ["thank", "hi", "hello"]):
@@ -1465,7 +1500,12 @@ CRITICAL REQUIREMENTS:
             # Create minimal valid JSON
             return f'''{{
     "subject": "{subject}",
-    "body": "{greeting},\\n\\nThank you for your email. I will review this and respond accordingly.\\n\\nBest regards,\\nAvani",
+    "body": "{greeting},\
+\
+Thank you for your email. I will review this and respond accordingly.\
+\
+Best regards,\
+Avani",
     "tone": "professional",
     "confidence": 0.7,
     "reasoning": "Reconstructed from partial response",
@@ -1489,7 +1529,8 @@ CRITICAL REQUIREMENTS:
         
         # Handle newlines in JSON string values more carefully
         # This is a critical fix - properly escape real newlines within strings
-        lines = json_str.split('\n')
+        lines = json_str.split('
+')
         fixed_lines = []
         in_string = False
         
@@ -1507,11 +1548,13 @@ CRITICAL REQUIREMENTS:
             
             if in_string and len(fixed_lines) > 0:
                 # We're inside a JSON string that spans lines - escape the newline
-                fixed_lines[-1] += '\\n' + line
+                fixed_lines[-1] += '\
+' + line
             else:
                 fixed_lines.append(line)
         
-        json_str = '\n'.join(fixed_lines)
+        json_str = '
+'.join(fixed_lines)
         
         # Fix incomplete strings (research finding: common truncation issue)
         if json_str.count('"') % 2 != 0:
@@ -1526,7 +1569,9 @@ CRITICAL REQUIREMENTS:
             json_str += '}' * (open_braces - close_braces)
         
         # Fix double-escaped backslashes (common LLM issue)
-        json_str = json_str.replace('\\\\n', '\\n')
+        json_str = json_str.replace('\\\
+', '\
+')
         json_str = json_str.replace('\\\\"', '"')
         
         
@@ -1574,15 +1619,25 @@ CRITICAL REQUIREMENTS:
         original_content = email.body.lower()
         
         if analysis.action_required == "attend":
-            body = f"Hi {sender_first_name},\n\nThank you for the meeting invitation. I'll check my calendar and confirm my attendance shortly."
+            body = f"Hi {sender_first_name},
+
+Thank you for the meeting invitation. I'll check my calendar and confirm my attendance shortly."
         elif 'deadline' in original_content:
-            body = f"Hi {sender_first_name},\n\nThank you for reminding me about the deadline. I'm working on this and will ensure timely completion as requested."
+            body = f"Hi {sender_first_name},
+
+Thank you for reminding me about the deadline. I'm working on this and will ensure timely completion as requested."
         elif 'question' in original_content or '?' in email.body:
-            body = f"Hi {sender_first_name},\n\nThank you for your question. I'll review the details and provide you with a comprehensive response shortly."
+            body = f"Hi {sender_first_name},
+
+Thank you for your question. I'll review the details and provide you with a comprehensive response shortly."
         elif analysis.action_required == "reply":
-            body = f"Hi {sender_first_name},\n\nThank you for your email. I've received your message and will respond with the necessary details shortly."
+            body = f"Hi {sender_first_name},
+
+Thank you for your email. I've received your message and will respond with the necessary details shortly."
         else:
-            body = f"Hi {sender_first_name},\n\nThank you for your email. I'll review this and get back to you soon with the relevant information."
+            body = f"Hi {sender_first_name},
+
+Thank you for your email. I'll review this and get back to you soon with the relevant information."
         
         return LLMDraftResult(
             subject=f"Re: {email.subject}",
@@ -1804,8 +1859,13 @@ class LLMEnhancedEmailSystem:
             return "Professional, friendly, concise communication style."
         
         # Combine sent email content for analysis
-        email_content = "\n\n---\n\n".join([
-            f"Subject: {email.get('subject', '')}\nBody: {email.get('body', '')[:500]}"
+        email_content = "
+
+---
+
+".join([
+            f"Subject: {email.get('subject', '')}
+Body: {email.get('body', '')[:500]}"
             for email in sent_emails[:5]  # Analyze up to 5 recent emails
         ])
         
@@ -2168,7 +2228,8 @@ Keep it under 200 words and focus on actionable style elements.
             analyzed_emails.sort(key=lambda x: x[1]['core_analysis'].priority_score, reverse=True)
             
             # Step 5: Display LLM Analysis Results with professional prioritization
-            print(f"\n🎯 PROFESSIONAL EMAIL PRIORITIZATION:")
+            print(f"
+🎯 PROFESSIONAL EMAIL PRIORITIZATION:")
             print("-" * 60)
             
             # Separate emails by priority categories
@@ -2446,7 +2507,8 @@ Keep it under 200 words and focus on actionable style elements.
             print("=" * 60)
             
             for i, (email, analysis) in enumerate(actionable_emails[:5]):
-                print(f"\n✨ Generating LLM draft {i+1}: {email.subject[:40]}...")
+                print(f"
+✨ Generating LLM draft {i+1}: {email.subject[:40]}...")
                 
                 # Generate enhanced contextual draft (inspired by inbox-zero)
                 draft = self.generate_contextual_draft(email, analysis)
@@ -2481,14 +2543,17 @@ Keep it under 200 words and focus on actionable style elements.
                         print(f"   📖 Preview: {preview}")
                     else:
                         print(f"   ❌ Failed to create draft: {draft_result.get('error')}")
-                        print(f"   📝 Draft content:\n{draft.body}")
+                        print(f"   📝 Draft content:
+{draft.body}")
                 
                 except Exception as e:
                     print(f"   ❌ Error creating draft: {e}")
-                    print(f"   📝 Draft content:\n{draft.body}")
+                    print(f"   📝 Draft content:
+{draft.body}")
             
             # Step 7: Professional Summary
-            print(f"\n🎯 PROFESSIONAL EMAIL ASSISTANT SUMMARY")
+            print(f"
+🎯 PROFESSIONAL EMAIL ASSISTANT SUMMARY")
             print("=" * 45)
             
             # Count by priority
@@ -2517,7 +2582,8 @@ Keep it under 200 words and focus on actionable style elements.
             print(f"   🟡 Urgent priority: {urgent_count}")
             print(f"   ⏰ With deadlines: {deadline_count}")
             
-            print(f"\n🛡️ SECURITY ANALYSIS:")
+            print(f"
+🛡️ SECURITY ANALYSIS:")
             print(f"   🚨 Security alerts: {security_alerts}")
             if security_alerts > 0:
                 risk_levels = {}
@@ -2530,22 +2596,26 @@ Keep it under 200 words and focus on actionable style elements.
             else:
                 print(f"   ✅ All emails appear safe")
             
-            print(f"\n📄 EMAIL SUMMARIZATION:")
+            print(f"
+📄 EMAIL SUMMARIZATION:")
             print(f"   📝 Long emails summarized: {summarized_emails}")
             if summarized_emails > 0:
                 avg_read_time = "2-3 minutes"  # Could calculate actual average
                 print(f"   ⏱️ Average reading time saved: {avg_read_time} per email")
             
-            print(f"\n📅 FOLLOW-UP TRACKING:")
+            print(f"
+📅 FOLLOW-UP TRACKING:")
             print(f"   📋 Total follow-ups scheduled: {total_follow_ups}")
             print(f"   🔔 Due/overdue follow-ups: {due_follow_ups_count}")
             
-            print(f"\n📂 SMART CATEGORIZATION:")
+            print(f"
+📂 SMART CATEGORIZATION:")
             top_categories = sorted(categories.items(), key=lambda x: x[1], reverse=True)[:3]
             for category, count in top_categories:
                 print(f"   📁 {category.capitalize()}: {count} emails")
             
-            print(f"\n📝 TEMPLATE SUGGESTIONS:")
+            print(f"
+📝 TEMPLATE SUGGESTIONS:")
             total_templates = sum(len(a['template_suggestions']) for e, a in analyzed_emails)
             print(f"   📋 Template suggestions generated: {total_templates}")
             most_suggested = {}
@@ -2557,7 +2627,8 @@ Keep it under 200 words and focus on actionable style elements.
                 print(f"   🏆 Most suggested template: {top_template}")
             
             # Calendar event statistics
-            print(f"\n📅 CALENDAR EVENT CREATION (TESTING MODE):")
+            print(f"
+📅 CALENDAR EVENT CREATION (TESTING MODE):")
             calendar_created = len([e for e, a in analyzed_emails if e.calendar_event_status == "created"])
             calendar_duplicates = len([e for e, a in analyzed_emails if e.calendar_event_status == "duplicate"])
             calendar_failed = len([e for e, a in analyzed_emails if e.calendar_event_status == "failed"])
@@ -2574,12 +2645,14 @@ Keep it under 200 words and focus on actionable style elements.
                 print(f"   👤 Note: All events created for personal calendar only")
                 print(f"   📝 No invitations sent to other attendees (testing mode)")
             
-            print(f"\n🤖 AI PROCESSING STATS:")
+            print(f"
+🤖 AI PROCESSING STATS:")
             print(f"   🧠 LLM calls made: {self.llm_calls}")
             print(f"   📝 Drafts created: {self.drafts_created}")
             print(f"   ⏱️ Estimated time saved: ~{self.drafts_created * 12} minutes")
             
-            print(f"\n🎯 NEW FEATURES ACTIVE:")
+            print(f"
+🎯 NEW FEATURES ACTIVE:")
             print(f"   ✅ Email Templates & Quick Responses")
             print(f"   ✅ Follow-up Tracking & Reminders")
             print(f"   ✅ Email Summarization (for long emails)")
@@ -2587,7 +2660,8 @@ Keep it under 200 words and focus on actionable style elements.
             print(f"   ✅ Smart Email Categorization")
             print(f"   ✅ Task Breakdown Generation")
             
-            print(f"\n💡 NEXT STEPS:")
+            print(f"
+💡 NEXT STEPS:")
             print(f"   1. Review critical and urgent emails first")
             if security_alerts > 0:
                 print(f"   2. 🚨 Address {security_alerts} security alert(s) immediately")
@@ -2597,6 +2671,12 @@ Keep it under 200 words and focus on actionable style elements.
             print(f"   5. Use suggested templates for quick replies")
             print(f"   6. Review email summaries to save reading time")
             print(f"📁 All drafts saved to: Outlook > Drafts folder")
+            
+            # Create prioritized email list draft in Outlook
+            try:
+                self._create_priority_email_list_draft(analyzed_emails, current_user_email)
+            except Exception as e:
+                print(f"⚠️ Could not create priority email list draft: {e}")
             
         except Exception as e:
             print(f"❌ Error in LLM processing: {e}")
@@ -2735,48 +2815,27 @@ Keep it under 200 words and focus on actionable style elements.
         # Create a unique key for this email's confirmation
         confirmation_key = f"calendar_confirm_{email.id}"
         
-        # Display email details for confirmation
-        st.write("---")
-        st.write(f"📧 **Calendar Event Creation Confirmation**")
-        st.write(f"**Email:** {email.subject}")
-        st.write(f"**From:** {email.sender} ({email.sender_email})")
-        st.write(f"**Priority:** {analysis.priority_score:.1f}/100")
-        st.write(f"**Type:** {analysis.email_type}")
-        
-        # Show preview of email content
-        preview_text = email.body[:200] + "..." if len(email.body) > 200 else email.body
-        st.write(f"**Content Preview:** {preview_text}")
-        
-        # Ask for confirmation
-        col1, col2 = st.columns([1, 1])
-        
-        with col1:
-            create_event = st.button(
-                f"✅ Create Calendar Event",
-                key=f"{confirmation_key}_yes",
-                help="Create a personal calendar event for this email"
-            )
-        
-        with col2:
-            skip_event = st.button(
-                f"❌ Skip Calendar Event", 
-                key=f"{confirmation_key}_no",
-                help="Skip creating a calendar event for this email"
-            )
-        
-        # Store the user's decision in session state
-        if create_event:
-            st.session_state[confirmation_key] = True
-            return True
-        elif skip_event:
-            st.session_state[confirmation_key] = False
-            return False
-        
         # Check if decision was made previously
         if confirmation_key in st.session_state:
             return st.session_state[confirmation_key]
         
-        # No decision made yet, return None to indicate waiting for input
+        # Queue this email for calendar confirmation (don't interrupt main flow)
+        if 'pending_calendar_confirmations' not in st.session_state:
+            st.session_state.pending_calendar_confirmations = {}
+        
+        st.session_state.pending_calendar_confirmations[confirmation_key] = {
+            'email': email,
+            'analysis': analysis,
+            'email_id': email.id,
+            'subject': email.subject,
+            'sender': email.sender,
+            'sender_email': email.sender_email,
+            'priority_score': analysis.priority_score,
+            'email_type': analysis.email_type,
+            'body_preview': email.body[:200] + "..." if len(email.body) > 200 else email.body
+        }
+        
+        # Return None to indicate we need confirmation later (don't block main processing)
         return None
     
     def _generate_event_key(self, email: OutlookEmailData, analysis: LLMAnalysisResult) -> str:
@@ -3347,6 +3406,106 @@ You may need to send meeting invitations manually if required."""
                 "message": f"Failed to create calendar event: {str(e)}"
             }
     
+    def _create_calendar_event_with_custom_details(self, email: OutlookEmailData, edited_details: dict) -> Dict:
+        """Create a calendar event using user-edited details from the UI"""
+        try:
+            from datetime import datetime, timedelta
+            import pytz
+            
+            print(f"   📧 Creating calendar event with custom details: {edited_details['title']}")
+            
+            # Parse the date and time from edited details
+            event_date = edited_details['date']  # YYYY-MM-DD format
+            start_time_str = edited_details['start_time']  # HH:MM format
+            end_time_str = edited_details['end_time']    # HH:MM format
+            
+            # Create datetime objects in Dubai timezone
+            dubai_tz = pytz.timezone('Asia/Dubai')
+            
+            # Parse start datetime
+            start_datetime_str = f"{event_date}T{start_time_str}:00"
+            start_datetime = datetime.fromisoformat(start_datetime_str)
+            start_datetime = dubai_tz.localize(start_datetime)
+            
+            # Parse end datetime  
+            end_datetime_str = f"{event_date}T{end_time_str}:00"
+            end_datetime = datetime.fromisoformat(end_datetime_str)
+            end_datetime = dubai_tz.localize(end_datetime)
+            
+            print(f"   📅 Scheduled time (Asia/Dubai): {start_datetime} to {end_datetime}")
+            
+            # Create enhanced description with original email context
+            description = f"""📧 Meeting created from email: {edited_details['original_email_subject']}
+            
+👤 Original organizer: {email.sender} ({email.sender_email})
+📅 Auto-created for personal calendar tracking
+
+🎯 Meeting purpose: {edited_details.get('purpose', 'Meeting discussion')}
+📝 Notes: {edited_details.get('description', 'No additional notes')}
+
+👥 Meeting participants (DO NOT SEND INVITES - PERSONAL TRACKING ONLY):
+{chr(10).join([f"   • {participant}" for participant in edited_details.get('participants', [])]) if edited_details.get('participants') else "   • No specific participants mentioned"}
+
+📧 Original email content:
+{edited_details.get('original_email_body', email.body)[:500]}{'...' if len(edited_details.get('original_email_body', email.body)) > 500 else ''}
+
+⚠️ IMPORTANT: This is a PERSONAL calendar entry only. 
+No invitations have been sent to other participants.
+You may need to send meeting invitations manually if required."""
+            
+            # Prepare event details for Outlook
+            event_details = {
+                'subject': edited_details['title'],
+                'start_time': start_datetime.isoformat(),
+                'end_time': end_datetime.isoformat(),
+                'description': description,
+                'location': edited_details.get('location', ''),
+                'attendees': []  # Personal calendar only - no attendees
+            }
+            
+            # Create the calendar event
+            result = self.outlook.create_meeting_from_email(email, event_details)
+            
+            if result.get('success'):
+                print(f"📅 Personal calendar event created with custom details: [PERSONAL] {event_details['subject']}")
+                print(f"   🕐 Time: {start_datetime} to {end_datetime}")
+                if edited_details.get('location'):
+                    print(f"   📍 Location: {edited_details['location']}")
+                print(f"   👤 Original organizer: {email.sender}")
+                print(f"   ⚠️ Note: Personal calendar entry only, no invitations sent")
+                
+                return {
+                    "success": True,
+                    "message": f"Calendar event created: {event_details['subject']}",
+                    "event_details": event_details
+                }
+            elif result.get('duplicate'):
+                print(f"⚠️ Calendar event already exists: {result.get('existing_event_subject')}")
+                print(f"   🕐 Existing time: {result.get('existing_event_start')}")
+                print(f"   📝 Skipping duplicate creation")
+                return {
+                    "success": False,
+                    "duplicate": True,
+                    "message": f"Duplicate event exists: {result.get('existing_event_subject')}",
+                    "existing_event": result
+                }
+            else:
+                error_msg = result.get('error', 'Unknown error occurred')
+                print(f"❌ Failed to create calendar event: {error_msg}")
+                return {
+                    "success": False,
+                    "error": error_msg,
+                    "message": f"Failed to create calendar event: {error_msg}"
+                }
+                
+        except Exception as e:
+            print(f"❌ Error creating calendar event with custom details: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "message": f"Failed to create calendar event with custom details: {str(e)}"
+            }
+    
     def _get_llm_meeting_suggestion(self, email: OutlookEmailData) -> dict:
         """Use LLM to extract meeting details with structured output"""
         
@@ -3647,7 +3806,8 @@ class WritingStyleAnalyzer:
         ]
         
         for email in emails:
-            lines = email.split('\n')
+            lines = email.split('
+')
             words = email.split()
             word_counts.append(len(words))
             
@@ -4507,10 +4667,14 @@ class EmailAutomationEngine:
             
             # Extract location
             location_patterns = [
-                r'at\s+([^,\n]+)',  # at Conference Room A
-                r'in\s+([^,\n]+)',  # in Building B
-                r'location:\s*([^,\n]+)',  # location: Main Office
-                r'room\s+([^,\n]+)',  # room 201
+                r'at\s+([^,
+]+)',  # at Conference Room A
+                r'in\s+([^,
+]+)',  # in Building B
+                r'location:\s*([^,
+]+)',  # location: Main Office
+                r'room\s+([^,
+]+)',  # room 201
             ]
             
             for pattern in location_patterns:
@@ -4528,6 +4692,307 @@ class EmailAutomationEngine:
         except Exception as e:
             print(f"   ❌ Error extracting event details: {e}")
             return None
+    
+    def _create_priority_email_list_draft(self, analyzed_emails, current_user_email):
+        \"\"\"Create a draft email with prioritized email list\"\"\"
+        from datetime import datetime
+        import pytz
+        
+        # Get current date and time in Dubai timezone
+        dubai_tz = pytz.timezone('Asia/Dubai')
+        now = datetime.now(dubai_tz)
+        date_str = now.strftime('%Y-%m-%d')
+        time_str = now.strftime('%H:%M')
+        
+        # Sort emails by priority score
+        sorted_emails = sorted(analyzed_emails, key=lambda x: x[1]['core_analysis'].priority_score, reverse=True)
+        
+        # Create email body
+        subject = f\"Emails with priority [{date_str}, {time_str}]\"
+        
+        body_parts = []
+        body_parts.append(f\"Email Priority Summary - {date_str} at {time_str}\")
+        body_parts.append(\"=\" * 50)
+        body_parts.append(\"\")
+        
+        # Group by priority levels
+        critical_emails = [(e, a) for e, a in sorted_emails if a['core_analysis'].priority_score >= 85]
+        urgent_emails = [(e, a) for e, a in sorted_emails if 70 <= a['core_analysis'].priority_score < 85]
+        normal_emails = [(e, a) for e, a in sorted_emails if 50 <= a['core_analysis'].priority_score < 70]
+        low_emails = [(e, a) for e, a in sorted_emails if a['core_analysis'].priority_score < 50]
+        
+        # Add each priority group
+        if critical_emails:
+            body_parts.append(\"🔴 CRITICAL PRIORITY (85+ Score)\")
+            body_parts.append(\"-\" * 30)
+            for i, (email, analysis) in enumerate(critical_emails, 1):
+                core = analysis['core_analysis']
+                security_warning = \"\"
+                if analysis['security_analysis'] and analysis['security_analysis'].is_suspicious:
+                    security_warning = f\" 🚨 {getattr(analysis['security_analysis'], 'risk_level', 'SUSPICIOUS')}\"
+                
+                body_parts.append(f\"{i}. Subject: {email.subject}\")
+                body_parts.append(f\"   From: {email.sender} <{email.sender_email}>\")
+                body_parts.append(f\"   Date: {email.date.strftime('%Y-%m-%d %H:%M')}\")
+                body_parts.append(f\"   Priority Score: {core.priority_score:.1f}/100\")
+                body_parts.append(f\"   Type: {core.email_type}\")
+                body_parts.append(f\"   Action Required: {core.action_required}\")
+                if security_warning:
+                    body_parts.append(f\"   Security: {security_warning}\")
+                body_parts.append(\"\")
+            body_parts.append(\"\")
+        
+        if urgent_emails:
+            body_parts.append(\"🟡 URGENT PRIORITY (70-84 Score)\")
+            body_parts.append(\"-\" * 30)
+            for i, (email, analysis) in enumerate(urgent_emails[:5], 1):  # Limit to 5
+                core = analysis['core_analysis']
+                body_parts.append(f\"{i}. {email.subject} - Score: {core.priority_score:.1f}\")
+                body_parts.append(f\"   From: {email.sender} <{email.sender_email}>\")
+                body_parts.append(f\"   Action: {core.action_required}\")
+                body_parts.append(\"\")
+            if len(urgent_emails) > 5:
+                body_parts.append(f\"   ... and {len(urgent_emails) - 5} more urgent emails\")
+            body_parts.append(\"\")
+        
+        if normal_emails:
+            body_parts.append(\"🟢 NORMAL PRIORITY (50-69 Score)\")
+            body_parts.append(\"-\" * 30)
+            for i, (email, analysis) in enumerate(normal_emails[:3], 1):  # Limit to 3
+                core = analysis['core_analysis']
+                body_parts.append(f\"{i}. {email.subject} - Score: {core.priority_score:.1f}\")
+                body_parts.append(f\"   From: {email.sender}\")
+                body_parts.append(\"\")
+            if len(normal_emails) > 3:
+                body_parts.append(f\"   ... and {len(normal_emails) - 3} more normal priority emails\")
+            body_parts.append(\"\")
+        
+        if low_emails:
+            body_parts.append(f\"⚪ LOW PRIORITY (<50 Score) - {len(low_emails)} emails\")
+            body_parts.append(\"-\" * 30)
+            for i, (email, analysis) in enumerate(low_emails[:2], 1):  # Limit to 2
+                core = analysis['core_analysis']
+                body_parts.append(f\"{i}. {email.subject[:50]}... - Score: {core.priority_score:.1f}\")
+                body_parts.append(f\"   From: {email.sender}\")
+                body_parts.append(\"\")
+            if len(low_emails) > 2:
+                body_parts.append(f\"   ... and {len(low_emails) - 2} more low priority emails\")
+            body_parts.append(\"\")
+        
+        # Add summary statistics
+        body_parts.append(\"📊 SUMMARY STATISTICS\")
+        body_parts.append(\"-\" * 20)
+        body_parts.append(f\"Total emails analyzed: {len(analyzed_emails)}\")
+        body_parts.append(f\"Critical priority: {len(critical_emails)}\")
+        body_parts.append(f\"Urgent priority: {len(urgent_emails)}\")
+        body_parts.append(f\"Normal priority: {len(normal_emails)}\")
+        body_parts.append(f\"Low priority: {len(low_emails)}\")
+        
+        # Add security summary if any suspicious emails
+        suspicious_emails = [(e, a) for e, a in analyzed_emails 
+                           if a['security_analysis'] and a['security_analysis'].is_suspicious]
+        if suspicious_emails:
+            body_parts.append(\"\")
+            body_parts.append(f\"🚨 SECURITY ALERTS: {len(suspicious_emails)} suspicious emails detected!\")
+        
+        body_parts.append(\"\")
+        body_parts.append(\"Generated by LLM-Enhanced Email Agent\")
+        body_parts.append(f\"Report generated on: {now.strftime('%Y-%m-%d at %H:%M %Z')}\")
+        
+        # Join all parts
+        body = \"\
+\".join(body_parts)
+        
+        # Create the draft
+        try:
+            draft_result = self.outlook.create_draft(
+                to=current_user_email,  # Send to self
+                subject=subject,
+                body=body
+            )
+            
+            if draft_result.get('success'):
+                print(f\"📋 Priority email list draft created successfully\")
+                print(f\"   Subject: {subject}\")
+                print(f\"   Location: Outlook > Drafts folder\")
+            else:
+                print(f\"❌ Failed to create priority list draft: {draft_result.get('error', 'Unknown error')}\")
+                
+            return draft_result
+            
+        except Exception as e:
+            print(f\"❌ Error creating priority email list draft: {e}\")
+            return {'success': False, 'error': str(e)}
+
+    def show_pending_calendar_confirmations(self):
+        """Show pending calendar confirmations in sidebar after main processing with editable preview fields"""
+        import streamlit as st
+        from datetime import datetime, timedelta
+        
+        if 'pending_calendar_confirmations' not in st.session_state or not st.session_state.pending_calendar_confirmations:
+            return
+        
+        st.sidebar.write("---")
+        st.sidebar.write("📅 **Calendar Event Confirmations**")
+        
+        confirmations_to_remove = []
+        
+        for confirmation_key, confirmation_data in st.session_state.pending_calendar_confirmations.items():
+            if confirmation_key in st.session_state:
+                # Decision already made, process it
+                decision = st.session_state[confirmation_key]
+                if decision:
+                    # Create calendar event with user-edited details
+                    try:
+                        email = confirmation_data['email']
+                        analysis = confirmation_data['analysis']
+                        
+                        # Check if user has edited the event details
+                        edited_details_key = f"{confirmation_key}_edited_details"
+                        if edited_details_key in st.session_state:
+                            # Use edited details to create custom calendar event
+                            edited_details = st.session_state[edited_details_key]
+                            calendar_event = self._create_calendar_event_with_custom_details(email, edited_details)
+                        else:
+                            # Use original method
+                            calendar_event = self._create_calendar_event_from_email(email, analysis)
+                        
+                        if calendar_event and calendar_event.get('success'):
+                            st.sidebar.success(f"✅ Calendar event created for: {confirmation_data['subject'][:30]}...")
+                        else:
+                            st.sidebar.error(f"❌ Failed to create calendar event for: {confirmation_data['subject'][:30]}...")
+                    except Exception as e:
+                        st.sidebar.error(f"❌ Error creating calendar event: {str(e)}")
+                else:
+                    st.sidebar.info(f"⏭️ Skipped calendar event for: {confirmation_data['subject'][:30]}...")
+                
+                confirmations_to_remove.append(confirmation_key)
+            else:
+                # Show enhanced confirmation dialog with editable preview fields
+                with st.sidebar.expander(f"📧 {confirmation_data['subject'][:30]}...", expanded=True):
+                    st.write(f"**From:** {confirmation_data['sender']}")
+                    st.write(f"**Priority:** {confirmation_data['priority_score']:.1f}/100")
+                    st.write(f"**Type:** {confirmation_data['email_type']}")
+                    st.write(f"**Preview:** {confirmation_data['body_preview']}")
+                    
+                    # Get LLM meeting suggestion for preview
+                    try:
+                        email = confirmation_data['email']
+                        meeting_suggestion = self._get_llm_meeting_suggestion(email)
+                        
+                        if meeting_suggestion and meeting_suggestion.get('should_create_meeting'):
+                            st.write("---")
+                            st.write("**📝 Edit Event Details:**")
+                            
+                            # Event Title
+                            default_title = meeting_suggestion.get('title', f"Meeting: {email.subject}")
+                            event_title = st.text_input(
+                                "Event Title:",
+                                value=default_title,
+                                key=f"{confirmation_key}_title"
+                            )
+                            
+                            # Date and Time
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                try:
+                                    default_date = datetime.strptime(meeting_suggestion.get('date', datetime.now().strftime('%Y-%m-%d')), '%Y-%m-%d').date()
+                                except:
+                                    default_date = datetime.now().date()
+                                
+                                event_date = st.date_input(
+                                    "Date:",
+                                    value=default_date,
+                                    key=f"{confirmation_key}_date"
+                                )
+                            
+                            with col2:
+                                # Time inputs
+                                default_start = meeting_suggestion.get('start_time', '14:00')
+                                default_end = meeting_suggestion.get('end_time', '15:00')
+                                
+                                try:
+                                    start_hour, start_min = map(int, default_start.split(':'))
+                                    end_hour, end_min = map(int, default_end.split(':'))
+                                except:
+                                    start_hour, start_min = 14, 0
+                                    end_hour, end_min = 15, 0
+                                
+                                start_time = st.time_input(
+                                    "Start Time:",
+                                    value=datetime.now().replace(hour=start_hour, minute=start_min).time(),
+                                    key=f"{confirmation_key}_start_time"
+                                )
+                                
+                                end_time = st.time_input(
+                                    "End Time:",
+                                    value=datetime.now().replace(hour=end_hour, minute=end_min).time(),
+                                    key=f"{confirmation_key}_end_time"
+                                )
+                            
+                            # Location
+                            default_location = meeting_suggestion.get('location', '')
+                            event_location = st.text_input(
+                                "Location:",
+                                value=default_location,
+                                key=f"{confirmation_key}_location"
+                            )
+                            
+                            # Description/Notes
+                            default_notes = meeting_suggestion.get('notes', '')
+                            event_description = st.text_area(
+                                "Description/Notes:",
+                                value=default_notes,
+                                height=100,
+                                key=f"{confirmation_key}_description"
+                            )
+                            
+                            # Participants (read-only for now, extracted from LLM)
+                            participants = meeting_suggestion.get('participants', [])
+                            if participants:
+                                st.write("**👥 Detected Participants:**")
+                                for participant in participants:
+                                    st.write(f"   • {participant}")
+                            
+                            # Store edited details in session state
+                            edited_details = {
+                                'title': event_title,
+                                'date': event_date.strftime('%Y-%m-%d'),
+                                'start_time': start_time.strftime('%H:%M'),
+                                'end_time': end_time.strftime('%H:%M'),
+                                'location': event_location,
+                                'description': event_description,
+                                'participants': participants,
+                                'purpose': meeting_suggestion.get('purpose', ''),
+                                'original_email_subject': email.subject,
+                                'original_email_body': email.body
+                            }
+                            st.session_state[f"{confirmation_key}_edited_details"] = edited_details
+                            
+                        else:
+                            st.warning("⚠️ Could not extract meeting details from email")
+                            
+                    except Exception as e:
+                        st.error(f"❌ Error extracting meeting details: {str(e)}")
+                    
+                    st.write("---")
+                    col1, col2 = st.columns([1, 1])
+                    with col1:
+                        if st.button("✅ Create Event", key=f"{confirmation_key}_yes"):
+                            st.session_state[confirmation_key] = True
+                            st.rerun()
+                    with col2:
+                        if st.button("❌ Skip", key=f"{confirmation_key}_no"):
+                            st.session_state[confirmation_key] = False
+                            st.rerun()
+        
+        # Clean up processed confirmations
+        for key in confirmations_to_remove:
+            del st.session_state.pending_calendar_confirmations[key]
+            # Also clean up edited details
+            edited_details_key = f"{key}_edited_details"
+            if edited_details_key in st.session_state:
+                del st.session_state[edited_details_key]
 
 class EmailHistoryExtractor:
     """Extracts relevant email history for context (inspired by inbox-zero)"""
@@ -4555,7 +5020,8 @@ class EmailHistoryExtractor:
                     
                     if body_content and len(body_content.strip()) > 20:
                         clean_body = self._clean_email_content(body_content)
-                        history.append(f"Subject: {subject}\n{clean_body[:300]}...")
+                        history.append(f"Subject: {subject}
+{clean_body[:300]}...")
                         
                         if len(history) >= max_emails:
                             break
@@ -4758,11 +5224,16 @@ Return JSON with:
         
         body_content = "Thank you for your email. I have received your message and will review it carefully."
         
-        closing = f"\n\n{style.closing_style}"
+        closing = f"
+
+{style.closing_style}"
         if style.signature:
-            closing += f"\n{style.signature}"
+            closing += f"
+{style.signature}"
         
-        full_body = f"{greeting},\n\n{body_content}{closing}"
+        full_body = f"{greeting},
+
+{body_content}{closing}"
         
         return LLMDraftResult(
             subject=f"Re: {email.subject}",

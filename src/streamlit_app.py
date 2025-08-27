@@ -266,6 +266,10 @@ def main():
         except Exception as e:
             pass  # Silently handle any errors in priority summary display
     
+    # Show calendar confirmations in sidebar
+    if hasattr(st.session_state, 'llm_system'):
+        st.session_state.llm_system.show_pending_calendar_confirmations()
+    
     # Output section (no duplicate display)
     if not st.session_state.output:
         st.info("💡 Click 'Process Emails' to start email analysis")
