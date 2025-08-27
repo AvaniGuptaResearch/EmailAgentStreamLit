@@ -3654,7 +3654,7 @@ FULL EXAMPLES:
             
             # Create the draft
             draft_result = self.outlook.create_draft(
-                to=current_user_email,  # Send to self
+                to_email=current_user_email,  # Send to self
                 subject=subject,
                 body=body
             )
