@@ -2771,6 +2771,9 @@ Keep it under 200 words and focus on actionable style elements.
             'body_preview': email.body[:200] + "..." if len(email.body) > 200 else email.body
         }
         
+        # Debug: Log that we queued this confirmation
+        print(f"🔍 DEBUG: Queued calendar confirmation for {email.subject[:30]}...")
+        
         # Return None to indicate we need confirmation later (don't block main processing)
         return None
     
@@ -4739,8 +4742,18 @@ class EmailAutomationEngine:
         import streamlit as st
         from datetime import datetime, timedelta
         
-        if 'pending_calendar_confirmations' not in st.session_state or not st.session_state.pending_calendar_confirmations:
+        # Debug: Check if there are pending confirmations
+        if 'pending_calendar_confirmations' not in st.session_state:
+            st.sidebar.write("🔍 Debug: No pending_calendar_confirmations in session_state")
             return
+        
+        if not st.session_state.pending_calendar_confirmations:
+            st.sidebar.write("🔍 Debug: pending_calendar_confirmations is empty")
+            return
+        
+        # Debug: Show count
+        count = len(st.session_state.pending_calendar_confirmations)
+        st.sidebar.write(f"🔍 Debug: Found {count} pending calendar confirmations")
         
         st.sidebar.write("---")
         st.sidebar.write("📅 **Calendar Event Confirmations**")
