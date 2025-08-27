@@ -198,7 +198,7 @@ def main():
                 "⚡ Lite Mode (Fast LLM)", 
                 "🏃 Ultra-Lite Mode (Keywords + Drafting)"
             ],
-            index=0,
+            index=1,
             help="Deep: All features (20 emails). Lite: LLM analysis only (10 emails). Ultra-Lite: Keywords + LLM drafting (5 emails)."
         )
     # Update mode if system is initialized
