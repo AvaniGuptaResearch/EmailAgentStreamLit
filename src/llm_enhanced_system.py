@@ -277,10 +277,7 @@ class UnifiedLLMService:
             "options": {
                 "temperature": temperature,
                 "num_predict": max_tokens,
-                "stop": ["Human:", "Assistant:", "###", "
-
-
-", "---"],
+                "stop": ["Human:", "Assistant:", "###", "\n\n\n", "---"],
                 "top_k": 40,
                 "top_p": 0.9,
                 "repeat_penalty": 1.1
@@ -737,11 +734,7 @@ class EmailTemplateManager:
                 name="Meeting Accept",
                 category="meetings",
                 subject_template="Re: {original_subject}",
-                body_template="Hi {sender_name},
-
-I can attend the meeting on {meeting_date} at {meeting_time}. I'll add it to my calendar.
-
-Looking forward to it.",
+                body_template="Hi {sender_name},\n\nI can attend the meeting on {meeting_date} at {meeting_time}. I'll add it to my calendar.\n\nLooking forward to it.",
                 tone="professional",
                 use_cases=["meeting invitation", "calendar request"],
                 variables=["sender_name", "meeting_date", "meeting_time"]
@@ -750,11 +743,7 @@ Looking forward to it.",
                 name="Meeting Decline",
                 category="meetings", 
                 subject_template="Re: {original_subject}",
-                body_template="Hi {sender_name},
-
-Unfortunately, I have a conflict and won't be able to attend the meeting on {meeting_date}. Could we reschedule to another time?
-
-Please let me know what works for you.",
+                body_template="Hi {sender_name},\n\nUnfortunately, I have a conflict and won't be able to attend the meeting on {meeting_date}. Could we reschedule to another time?\n\nPlease let me know what works for you.",
                 tone="professional",
                 use_cases=["meeting invitation", "calendar conflict"],
                 variables=["sender_name", "meeting_date"]
@@ -763,9 +752,7 @@ Please let me know what works for you.",
                 name="Quick Acknowledgment",
                 category="general",
                 subject_template="Re: {original_subject}",
-                body_template="Hi {sender_name},
-
-Thank you for your email. I've received it and will review the details. I'll get back to you by {response_deadline}.",
+                body_template="Hi {sender_name},\n\nThank you for your email. I've received it and will review the details. I'll get back to you by {response_deadline}.",
                 tone="professional",
                 use_cases=["acknowledgment", "buying time"],
                 variables=["sender_name", "response_deadline"]
@@ -774,14 +761,7 @@ Thank you for your email. I've received it and will review the details. I'll get
                 name="Request More Info",
                 category="general",
                 subject_template="Re: {original_subject} - Need Additional Information",
-                body_template="Hi {sender_name},
-
-Thank you for reaching out. To better assist you, could you please provide:
-
-• {info_needed_1}
-• {info_needed_2}
-
-Once I have this information, I'll be able to help you more effectively.",
+                body_template="Hi {sender_name},\n\nThank you for reaching out. To better assist you, could you please provide:\n\n• {info_needed_1}\n• {info_needed_2}\n\nOnce I have this information, I'll be able to help you more effectively.",
                 tone="professional",
                 use_cases=["clarification", "information request"],
                 variables=["sender_name", "info_needed_1", "info_needed_2"]
@@ -790,11 +770,7 @@ Once I have this information, I'll be able to help you more effectively.",
                 name="Out of Office Reply",
                 category="automated",
                 subject_template="Out of Office: Re: {original_subject}",
-                body_template="Hi {sender_name},
-
-I'm currently out of the office and will return on {return_date}. I'll respond to your email when I'm back.
-
-For urgent matters, please contact {backup_contact}.",
+                body_template="Hi {sender_name},\n\nI'm currently out of the office and will return on {return_date}. I'll respond to your email when I'm back.\n\nFor urgent matters, please contact {backup_contact}.",
                 tone="professional",
                 use_cases=["vacation", "out of office"],
                 variables=["sender_name", "return_date", "backup_contact"]
@@ -803,11 +779,7 @@ For urgent matters, please contact {backup_contact}.",
                 name="Task Completion",
                 category="updates",
                 subject_template="Completed: {task_name}",
-                body_template="Hi {sender_name},
-
-I've completed {task_name} as requested. {completion_details}
-
-Please let me know if you need anything else.",
+                body_template="Hi {sender_name},\n\nI've completed {task_name} as requested. {completion_details}\n\nPlease let me know if you need anything else.",
                 tone="professional",
                 use_cases=["task update", "completion notification"],
                 variables=["sender_name", "task_name", "completion_details"]
@@ -846,10 +818,7 @@ Please let me know if you need anything else.",
             subject = subject.replace(f"{{{var}}}", value)
             body = body.replace(f"{{{var}}}", value)
         
-        return f"Subject: {subject}
-
-Body:
-{body}"
+        return f"Subject: {subject}\\n\\nBody:\\n{body}"
 
 class FollowUpTracker:
     """Tracks emails that need follow-up"""
@@ -1469,8 +1438,7 @@ CRITICAL REQUIREMENTS:
                 return content
         
         # Strategy 4: Try to reconstruct from partial JSON
-        lines = response.split('
-')
+        lines = response.split('\\n')
         json_lines = []
         in_json = False
         
@@ -1484,8 +1452,7 @@ CRITICAL REQUIREMENTS:
                     break
         
         if json_lines:
-            return '
-'.join(json_lines)
+            return '\\n'.join(json_lines)
         
         # Strategy 5: Simple fallback - try to build minimal JSON from response content
         if "Re:" in response and any(word in response.lower() for word in ["thank", "hi", "hello"]):
@@ -1529,8 +1496,7 @@ Avani",
         
         # Handle newlines in JSON string values more carefully
         # This is a critical fix - properly escape real newlines within strings
-        lines = json_str.split('
-')
+        lines = json_str.split('\\n')
         fixed_lines = []
         in_string = False
         
@@ -1553,8 +1519,7 @@ Avani",
             else:
                 fixed_lines.append(line)
         
-        json_str = '
-'.join(fixed_lines)
+        json_str = '\\n'.join(fixed_lines)
         
         # Fix incomplete strings (research finding: common truncation issue)
         if json_str.count('"') % 2 != 0:
@@ -1572,7 +1537,7 @@ Avani",
         json_str = json_str.replace('\\\
 ', '\
 ')
-        json_str = json_str.replace('\\\\"', '"')
+        json_str = json_str.replace('\\\"', '"')
         
         
         return json_str
@@ -1619,25 +1584,15 @@ Avani",
         original_content = email.body.lower()
         
         if analysis.action_required == "attend":
-            body = f"Hi {sender_first_name},
-
-Thank you for the meeting invitation. I'll check my calendar and confirm my attendance shortly."
+            body = f"Hi {sender_first_name},\n\nThank you for the meeting invitation. I'll check my calendar and confirm my attendance shortly."
         elif 'deadline' in original_content:
-            body = f"Hi {sender_first_name},
-
-Thank you for reminding me about the deadline. I'm working on this and will ensure timely completion as requested."
+            body = f"Hi {sender_first_name},\n\nThank you for reminding me about the deadline. I'm working on this and will ensure timely completion as requested."
         elif 'question' in original_content or '?' in email.body:
-            body = f"Hi {sender_first_name},
-
-Thank you for your question. I'll review the details and provide you with a comprehensive response shortly."
+            body = f"Hi {sender_first_name},\n\nThank you for your question. I'll review the details and provide you with a comprehensive response shortly."
         elif analysis.action_required == "reply":
-            body = f"Hi {sender_first_name},
-
-Thank you for your email. I've received your message and will respond with the necessary details shortly."
+            body = f"Hi {sender_first_name},\n\nThank you for your email. I've received your message and will respond with the necessary details shortly."
         else:
-            body = f"Hi {sender_first_name},
-
-Thank you for your email. I'll review this and get back to you soon with the relevant information."
+            body = f"Hi {sender_first_name},\n\nThank you for your email. I'll review this and get back to you soon with the relevant information."
         
         return LLMDraftResult(
             subject=f"Re: {email.subject}",
@@ -1859,13 +1814,8 @@ class LLMEnhancedEmailSystem:
             return "Professional, friendly, concise communication style."
         
         # Combine sent email content for analysis
-        email_content = "
-
----
-
-".join([
-            f"Subject: {email.get('subject', '')}
-Body: {email.get('body', '')[:500]}"
+        email_content = "\\n\\n---\\n\\n".join([
+            f"Subject: {email.get('subject', '')}\nBody: {email.get('body', '')[:500]}"
             for email in sent_emails[:5]  # Analyze up to 5 recent emails
         ])
         
@@ -2228,8 +2178,7 @@ Keep it under 200 words and focus on actionable style elements.
             analyzed_emails.sort(key=lambda x: x[1]['core_analysis'].priority_score, reverse=True)
             
             # Step 5: Display LLM Analysis Results with professional prioritization
-            print(f"
-🎯 PROFESSIONAL EMAIL PRIORITIZATION:")
+            print(f"\n🎯 PROFESSIONAL EMAIL PRIORITIZATION:")
             print("-" * 60)
             
             # Separate emails by priority categories
@@ -2507,8 +2456,7 @@ Keep it under 200 words and focus on actionable style elements.
             print("=" * 60)
             
             for i, (email, analysis) in enumerate(actionable_emails[:5]):
-                print(f"
-✨ Generating LLM draft {i+1}: {email.subject[:40]}...")
+                print(f"\n✨ Generating LLM draft {i+1}: {email.subject[:40]}...")
                 
                 # Generate enhanced contextual draft (inspired by inbox-zero)
                 draft = self.generate_contextual_draft(email, analysis)
@@ -2543,17 +2491,14 @@ Keep it under 200 words and focus on actionable style elements.
                         print(f"   📖 Preview: {preview}")
                     else:
                         print(f"   ❌ Failed to create draft: {draft_result.get('error')}")
-                        print(f"   📝 Draft content:
-{draft.body}")
+                        print(f"   📝 Draft content:\n{draft.body}")
                 
                 except Exception as e:
                     print(f"   ❌ Error creating draft: {e}")
-                    print(f"   📝 Draft content:
-{draft.body}")
+                    print(f"   📝 Draft content:\\n{draft.body}")
             
             # Step 7: Professional Summary
-            print(f"
-🎯 PROFESSIONAL EMAIL ASSISTANT SUMMARY")
+            print(f"\n🎯 PROFESSIONAL EMAIL ASSISTANT SUMMARY")
             print("=" * 45)
             
             # Count by priority
@@ -2582,8 +2527,7 @@ Keep it under 200 words and focus on actionable style elements.
             print(f"   🟡 Urgent priority: {urgent_count}")
             print(f"   ⏰ With deadlines: {deadline_count}")
             
-            print(f"
-🛡️ SECURITY ANALYSIS:")
+            print(f"\n🛡️ SECURITY ANALYSIS:")
             print(f"   🚨 Security alerts: {security_alerts}")
             if security_alerts > 0:
                 risk_levels = {}
@@ -2596,26 +2540,22 @@ Keep it under 200 words and focus on actionable style elements.
             else:
                 print(f"   ✅ All emails appear safe")
             
-            print(f"
-📄 EMAIL SUMMARIZATION:")
+            print(f"\n📄 EMAIL SUMMARIZATION:")
             print(f"   📝 Long emails summarized: {summarized_emails}")
             if summarized_emails > 0:
                 avg_read_time = "2-3 minutes"  # Could calculate actual average
                 print(f"   ⏱️ Average reading time saved: {avg_read_time} per email")
             
-            print(f"
-📅 FOLLOW-UP TRACKING:")
+            print(f"\n📅 FOLLOW-UP TRACKING:")
             print(f"   📋 Total follow-ups scheduled: {total_follow_ups}")
             print(f"   🔔 Due/overdue follow-ups: {due_follow_ups_count}")
             
-            print(f"
-📂 SMART CATEGORIZATION:")
+            print(f"\n📂 SMART CATEGORIZATION:")
             top_categories = sorted(categories.items(), key=lambda x: x[1], reverse=True)[:3]
             for category, count in top_categories:
                 print(f"   📁 {category.capitalize()}: {count} emails")
             
-            print(f"
-📝 TEMPLATE SUGGESTIONS:")
+            print(f"\n📝 TEMPLATE SUGGESTIONS:")
             total_templates = sum(len(a['template_suggestions']) for e, a in analyzed_emails)
             print(f"   📋 Template suggestions generated: {total_templates}")
             most_suggested = {}
@@ -2627,8 +2567,7 @@ Keep it under 200 words and focus on actionable style elements.
                 print(f"   🏆 Most suggested template: {top_template}")
             
             # Calendar event statistics
-            print(f"
-📅 CALENDAR EVENT CREATION (TESTING MODE):")
+            print(f"\n📅 CALENDAR EVENT CREATION (TESTING MODE):")
             calendar_created = len([e for e, a in analyzed_emails if e.calendar_event_status == "created"])
             calendar_duplicates = len([e for e, a in analyzed_emails if e.calendar_event_status == "duplicate"])
             calendar_failed = len([e for e, a in analyzed_emails if e.calendar_event_status == "failed"])
@@ -2645,14 +2584,12 @@ Keep it under 200 words and focus on actionable style elements.
                 print(f"   👤 Note: All events created for personal calendar only")
                 print(f"   📝 No invitations sent to other attendees (testing mode)")
             
-            print(f"
-🤖 AI PROCESSING STATS:")
+            print(f"\n🤖 AI PROCESSING STATS:")
             print(f"   🧠 LLM calls made: {self.llm_calls}")
             print(f"   📝 Drafts created: {self.drafts_created}")
             print(f"   ⏱️ Estimated time saved: ~{self.drafts_created * 12} minutes")
             
-            print(f"
-🎯 NEW FEATURES ACTIVE:")
+            print(f"\n🎯 NEW FEATURES ACTIVE:")
             print(f"   ✅ Email Templates & Quick Responses")
             print(f"   ✅ Follow-up Tracking & Reminders")
             print(f"   ✅ Email Summarization (for long emails)")
@@ -2660,8 +2597,7 @@ Keep it under 200 words and focus on actionable style elements.
             print(f"   ✅ Smart Email Categorization")
             print(f"   ✅ Task Breakdown Generation")
             
-            print(f"
-💡 NEXT STEPS:")
+            print(f"\n💡 NEXT STEPS:")
             print(f"   1. Review critical and urgent emails first")
             if security_alerts > 0:
                 print(f"   2. 🚨 Address {security_alerts} security alert(s) immediately")
@@ -3806,8 +3742,7 @@ class WritingStyleAnalyzer:
         ]
         
         for email in emails:
-            lines = email.split('
-')
+            lines = email.split('\\n')
             words = email.split()
             word_counts.append(len(words))
             
@@ -4667,14 +4602,10 @@ class EmailAutomationEngine:
             
             # Extract location
             location_patterns = [
-                r'at\s+([^,
-]+)',  # at Conference Room A
-                r'in\s+([^,
-]+)',  # in Building B
-                r'location:\s*([^,
-]+)',  # location: Main Office
-                r'room\s+([^,
-]+)',  # room 201
+                r'at\s+([^,\n]+)',  # at Conference Room A
+                r'in\s+([^,\n]+)',  # in Building B
+                r'location:\s*([^,\n]+)',  # location: Main Office
+                r'room\s+([^,\n]+)',  # room 201
             ]
             
             for pattern in location_patterns:
@@ -4694,7 +4625,7 @@ class EmailAutomationEngine:
             return None
     
     def _create_priority_email_list_draft(self, analyzed_emails, current_user_email):
-        \"\"\"Create a draft email with prioritized email list\"\"\"
+        """Create a draft email with prioritized email list"""
         from datetime import datetime
         import pytz
         
@@ -4708,12 +4639,12 @@ class EmailAutomationEngine:
         sorted_emails = sorted(analyzed_emails, key=lambda x: x[1]['core_analysis'].priority_score, reverse=True)
         
         # Create email body
-        subject = f\"Emails with priority [{date_str}, {time_str}]\"
+        subject = f"Emails with priority [{date_str}, {time_str}]"
         
         body_parts = []
-        body_parts.append(f\"Email Priority Summary - {date_str} at {time_str}\")
-        body_parts.append(\"=\" * 50)
-        body_parts.append(\"\")
+        body_parts.append(f"Email Priority Summary - {date_str} at {time_str}")
+        body_parts.append("=" * 50)
+        body_parts.append("")
         
         # Group by priority levels
         critical_emails = [(e, a) for e, a in sorted_emails if a['core_analysis'].priority_score >= 85]
@@ -4723,85 +4654,85 @@ class EmailAutomationEngine:
         
         # Add each priority group
         if critical_emails:
-            body_parts.append(\"🔴 CRITICAL PRIORITY (85+ Score)\")
-            body_parts.append(\"-\" * 30)
+            body_parts.append("🔴 CRITICAL PRIORITY (85+ Score)")
+            body_parts.append("-" * 30)
             for i, (email, analysis) in enumerate(critical_emails, 1):
                 core = analysis['core_analysis']
-                security_warning = \"\"
+                security_warning = ""
                 if analysis['security_analysis'] and analysis['security_analysis'].is_suspicious:
-                    security_warning = f\" 🚨 {getattr(analysis['security_analysis'], 'risk_level', 'SUSPICIOUS')}\"
+                    security_warning = f" 🚨 {getattr(analysis['security_analysis'], 'risk_level', 'SUSPICIOUS')}"
                 
-                body_parts.append(f\"{i}. Subject: {email.subject}\")
-                body_parts.append(f\"   From: {email.sender} <{email.sender_email}>\")
-                body_parts.append(f\"   Date: {email.date.strftime('%Y-%m-%d %H:%M')}\")
-                body_parts.append(f\"   Priority Score: {core.priority_score:.1f}/100\")
-                body_parts.append(f\"   Type: {core.email_type}\")
-                body_parts.append(f\"   Action Required: {core.action_required}\")
+                body_parts.append(f"{i}. Subject: {email.subject}")
+                body_parts.append(f"   From: {email.sender} <{email.sender_email}>")
+                body_parts.append(f"   Date: {email.date.strftime('%Y-%m-%d %H:%M')}")
+                body_parts.append(f"   Priority Score: {core.priority_score:.1f}/100")
+                body_parts.append(f"   Type: {core.email_type}")
+                body_parts.append(f"   Action Required: {core.action_required}")
                 if security_warning:
-                    body_parts.append(f\"   Security: {security_warning}\")
-                body_parts.append(\"\")
-            body_parts.append(\"\")
+                    body_parts.append(f"   Security: {security_warning}")
+                body_parts.append("")
+            body_parts.append("")
         
         if urgent_emails:
-            body_parts.append(\"🟡 URGENT PRIORITY (70-84 Score)\")
-            body_parts.append(\"-\" * 30)
+            body_parts.append("🟡 URGENT PRIORITY (70-84 Score)")
+            body_parts.append("-" * 30)
             for i, (email, analysis) in enumerate(urgent_emails[:5], 1):  # Limit to 5
                 core = analysis['core_analysis']
-                body_parts.append(f\"{i}. {email.subject} - Score: {core.priority_score:.1f}\")
-                body_parts.append(f\"   From: {email.sender} <{email.sender_email}>\")
-                body_parts.append(f\"   Action: {core.action_required}\")
-                body_parts.append(\"\")
+                body_parts.append(f"{i}. {email.subject} - Score: {core.priority_score:.1f}")
+                body_parts.append(f"   From: {email.sender} <{email.sender_email}>")
+                body_parts.append(f"   Action: {core.action_required}")
+                body_parts.append("")
             if len(urgent_emails) > 5:
-                body_parts.append(f\"   ... and {len(urgent_emails) - 5} more urgent emails\")
-            body_parts.append(\"\")
+                body_parts.append(f"   ... and {len(urgent_emails) - 5} more urgent emails")
+            body_parts.append("")
         
         if normal_emails:
-            body_parts.append(\"🟢 NORMAL PRIORITY (50-69 Score)\")
-            body_parts.append(\"-\" * 30)
+            body_parts.append("🟢 NORMAL PRIORITY (50-69 Score)")
+            body_parts.append("-" * 30)
             for i, (email, analysis) in enumerate(normal_emails[:3], 1):  # Limit to 3
                 core = analysis['core_analysis']
-                body_parts.append(f\"{i}. {email.subject} - Score: {core.priority_score:.1f}\")
-                body_parts.append(f\"   From: {email.sender}\")
-                body_parts.append(\"\")
+                body_parts.append(f"{i}. {email.subject} - Score: {core.priority_score:.1f}")
+                body_parts.append(f"   From: {email.sender}")
+                body_parts.append("")
             if len(normal_emails) > 3:
-                body_parts.append(f\"   ... and {len(normal_emails) - 3} more normal priority emails\")
-            body_parts.append(\"\")
+                body_parts.append(f"   ... and {len(normal_emails) - 3} more normal priority emails")
+            body_parts.append("")
         
         if low_emails:
-            body_parts.append(f\"⚪ LOW PRIORITY (<50 Score) - {len(low_emails)} emails\")
-            body_parts.append(\"-\" * 30)
+            body_parts.append(f"⚪ LOW PRIORITY (<50 Score) - {len(low_emails)} emails")
+            body_parts.append("-" * 30)
             for i, (email, analysis) in enumerate(low_emails[:2], 1):  # Limit to 2
                 core = analysis['core_analysis']
-                body_parts.append(f\"{i}. {email.subject[:50]}... - Score: {core.priority_score:.1f}\")
-                body_parts.append(f\"   From: {email.sender}\")
-                body_parts.append(\"\")
+                body_parts.append(f"{i}. {email.subject[:50]}... - Score: {core.priority_score:.1f}")
+                body_parts.append(f"   From: {email.sender}")
+                body_parts.append("")
             if len(low_emails) > 2:
-                body_parts.append(f\"   ... and {len(low_emails) - 2} more low priority emails\")
-            body_parts.append(\"\")
+                body_parts.append(f"   ... and {len(low_emails) - 2} more low priority emails")
+            body_parts.append("")
         
         # Add summary statistics
-        body_parts.append(\"📊 SUMMARY STATISTICS\")
-        body_parts.append(\"-\" * 20)
-        body_parts.append(f\"Total emails analyzed: {len(analyzed_emails)}\")
-        body_parts.append(f\"Critical priority: {len(critical_emails)}\")
-        body_parts.append(f\"Urgent priority: {len(urgent_emails)}\")
-        body_parts.append(f\"Normal priority: {len(normal_emails)}\")
-        body_parts.append(f\"Low priority: {len(low_emails)}\")
+        body_parts.append("📊 SUMMARY STATISTICS")
+        body_parts.append("-" * 20)
+        body_parts.append(f"Total emails analyzed: {len(analyzed_emails)}")
+        body_parts.append(f"Critical priority: {len(critical_emails)}")
+        body_parts.append(f"Urgent priority: {len(urgent_emails)}")
+        body_parts.append(f"Normal priority: {len(normal_emails)}")
+        body_parts.append(f"Low priority: {len(low_emails)}")
         
         # Add security summary if any suspicious emails
         suspicious_emails = [(e, a) for e, a in analyzed_emails 
                            if a['security_analysis'] and a['security_analysis'].is_suspicious]
         if suspicious_emails:
-            body_parts.append(\"\")
-            body_parts.append(f\"🚨 SECURITY ALERTS: {len(suspicious_emails)} suspicious emails detected!\")
+            body_parts.append("")
+            body_parts.append(f"🚨 SECURITY ALERTS: {len(suspicious_emails)} suspicious emails detected!")
         
-        body_parts.append(\"\")
-        body_parts.append(\"Generated by LLM-Enhanced Email Agent\")
-        body_parts.append(f\"Report generated on: {now.strftime('%Y-%m-%d at %H:%M %Z')}\")
+        body_parts.append("")
+        body_parts.append("Generated by LLM-Enhanced Email Agent")
+        body_parts.append(f"Report generated on: {now.strftime('%Y-%m-%d at %H:%M %Z')}")
         
         # Join all parts
-        body = \"\
-\".join(body_parts)
+        body = "\
+".join(body_parts)
         
         # Create the draft
         try:
@@ -4812,16 +4743,16 @@ class EmailAutomationEngine:
             )
             
             if draft_result.get('success'):
-                print(f\"📋 Priority email list draft created successfully\")
-                print(f\"   Subject: {subject}\")
-                print(f\"   Location: Outlook > Drafts folder\")
+                print(f"📋 Priority email list draft created successfully")
+                print(f"   Subject: {subject}")
+                print(f"   Location: Outlook > Drafts folder")
             else:
-                print(f\"❌ Failed to create priority list draft: {draft_result.get('error', 'Unknown error')}\")
+                print(f"❌ Failed to create priority list draft: {draft_result.get('error', 'Unknown error')}")
                 
             return draft_result
             
         except Exception as e:
-            print(f\"❌ Error creating priority email list draft: {e}\")
+            print(f"❌ Error creating priority email list draft: {e}")
             return {'success': False, 'error': str(e)}
 
     def show_pending_calendar_confirmations(self):
@@ -5020,8 +4951,7 @@ class EmailHistoryExtractor:
                     
                     if body_content and len(body_content.strip()) > 20:
                         clean_body = self._clean_email_content(body_content)
-                        history.append(f"Subject: {subject}
-{clean_body[:300]}...")
+                        history.append(f"Subject: {subject}\n{clean_body[:300]}...")
                         
                         if len(history) >= max_emails:
                             break
@@ -5224,16 +5154,11 @@ Return JSON with:
         
         body_content = "Thank you for your email. I have received your message and will review it carefully."
         
-        closing = f"
-
-{style.closing_style}"
+        closing = f"\\n\\n{style.closing_style}"
         if style.signature:
-            closing += f"
-{style.signature}"
+            closing += f"\n{style.signature}"
         
-        full_body = f"{greeting},
-
-{body_content}{closing}"
+        full_body = f"{greeting},\\n\\n{body_content}{closing}"
         
         return LLMDraftResult(
             subject=f"Re: {email.subject}",
