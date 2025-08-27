@@ -56,7 +56,7 @@ except ImportError as e:
         if os.path.exists(current_dir):
             st.write(f"Files in src directory: {os.listdir(current_dir)}")
         
-        LLM_AVAILABLE = False
+        LLM_AVAILABLE = False  # Import failed, so system not available
 
 load_dotenv()
 
@@ -267,8 +267,11 @@ def main():
             pass  # Silently handle any errors in priority summary display
     
     # Show calendar confirmations in sidebar
-    if hasattr(st.session_state, 'llm_system'):
-        st.session_state.llm_system.show_pending_calendar_confirmations()
+    if hasattr(st.session_state, 'llm_system') and st.session_state.llm_system is not None:
+        try:
+            st.session_state.llm_system.show_pending_calendar_confirmations()
+        except Exception as e:
+            pass  # Silently handle calendar confirmation errors
     
     # Output section (no duplicate display)
     if not st.session_state.output:
