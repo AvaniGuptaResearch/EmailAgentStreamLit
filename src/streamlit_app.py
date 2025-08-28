@@ -269,9 +269,19 @@ def main():
     # Show calendar confirmations in sidebar
     if hasattr(st.session_state, 'llm_system') and st.session_state.llm_system is not None:
         try:
+            # Debug: Check if calendar confirmations exist
+            if hasattr(st.session_state, 'pending_calendar_confirmations'):
+                count = len(st.session_state.pending_calendar_confirmations)
+                if count > 0:
+                    st.sidebar.info(f"📅 {count} calendar events pending confirmation")
+                else:
+                    st.sidebar.info("📅 No calendar events pending")
+            else:
+                st.sidebar.info("📅 No calendar confirmation state found")
+            
             st.session_state.llm_system.show_pending_calendar_confirmations()
         except Exception as e:
-            pass  # Silently handle calendar confirmation errors
+            st.sidebar.error(f"Calendar confirmation error: {e}")  # Show error instead of hiding it
     
     # Output section (no duplicate display)
     if not st.session_state.output:

@@ -2804,7 +2804,7 @@ Keep it under 200 words and focus on actionable style elements.
         
         if should_create:
             email.event_key = self._generate_event_key(email, analysis)
-            print(f"   📅 Calendar event will be created for meeting")
+            # Don't print misleading message here - LLM will make final decision
             return True
         else:
             # No verbose logging for non-meetings
@@ -3564,12 +3564,27 @@ Subject: {email.subject}
 From: {email.sender} ({email.sender_email})
 Body: {email.body}
 
+COMMON SENSE RULES - WHEN NOT TO CREATE CALENDAR EVENTS:
+❌ DO NOT create events for:
+- HR announcements, company-wide events, or department meetings (you're just an attendee)
+- Group sessions, workshops, or events organized by others (they'll send proper invites)
+- Research talks, seminars, or lectures (these are announcements, not meeting requests)
+- All-hands meetings, town halls, or corporate communications
+- Training sessions, webinars, or educational events organized by others
+- Any event where you're clearly just being informed, not asked to organize
+
+✅ DO create events ONLY for:
+- Direct meeting requests where you need to organize/host
+- One-on-one meetings you're asked to schedule
+- Small group meetings where you're the organizer
+- Follow-up meetings you need to set up
+
 INSTRUCTIONS:
-1. Determine if this email is requesting/suggesting a meeting that should be scheduled
-2. Extract meeting details if applicable - PRESERVE ORIGINAL TIMES EXACTLY
-3. If meeting is outside office hours or on weekend, suggest next business day during office hours
-4. Identify all participants mentioned in the email
-5. Extract or suggest meeting purpose and location
+1. Apply common sense rules above FIRST - if this is an announcement/invitation, return should_create_meeting: false
+2. Only create meetings for direct scheduling requests where you're the organizer
+3. Extract meeting details if applicable - PRESERVE ORIGINAL TIMES EXACTLY
+4. If meeting is outside office hours or on weekend, suggest next business day during office hours
+5. Identify all participants mentioned in the email
 
 CRITICAL: Use 24-hour format for times. "2-4 PM" = start_time: "14:00", end_time: "16:00"
 
@@ -3595,10 +3610,16 @@ TIME CONVERSION EXAMPLES:
 - "11am-12pm" → start_time: "11:00", end_time: "12:00"
 - "1:15-2:45 PM" → start_time: "13:15", end_time: "14:45"
 
-FULL EXAMPLES:
-- "Let's meet Monday 2-4 PM" → should_create_meeting: true, date: next Monday, start_time: "14:00", end_time: "16:00"
-- "Thanks for the update" → should_create_meeting: false
-- "Can we schedule a call this evening?" → should_create_meeting: true, office_hours_adjusted: true (next business day)
+EXAMPLES:
+✅ CREATE EVENTS FOR:
+- "Can we meet Monday 2-4 PM to discuss the project?" → should_create_meeting: true
+- "Let's schedule a call to review the proposal" → should_create_meeting: true
+
+❌ DON'T CREATE EVENTS FOR:
+- "HR Fuel Up Fridays - ChatGPT session on Aug 22, 11-11:30 AM" → should_create_meeting: false (HR event)
+- "Research talk by Prof. Smith on Monday 11 AM-12 PM" → should_create_meeting: false (announcement)
+- "Team all-hands meeting tomorrow at 2 PM" → should_create_meeting: false (company event)
+- "Thanks for the update" → should_create_meeting: false (no meeting requested)
 """
         
         try:
