@@ -108,14 +108,24 @@ def initialize_system(force_fresh=False):
         with st.spinner("🔧 Initializing and authenticating..."):
             st.session_state.llm_system = LLMEnhancedEmailSystem()
             # Trigger authentication during initialization
-            st.session_state.llm_system.outlook.authenticate(force_fresh=force_fresh)
-        
-        # Mark auth as completed
-        st.session_state.auth_completed = True
-        st.session_state.auth_in_progress = False
-        st.success("✅ System Ready! You can now process emails.")
-        st.rerun()  # Refresh to show the Process Emails button
-        return True
+            auth_result = st.session_state.llm_system.outlook.authenticate(force_fresh=force_fresh)
+            
+            # Test if authentication actually worked by trying to get user info
+            try:
+                user_info = st.session_state.llm_system.outlook._make_graph_request("/me")
+                if user_info and user_info.get('id'):
+                    # Authentication actually succeeded
+                    st.session_state.auth_completed = True
+                    st.session_state.auth_in_progress = False
+                    st.success("✅ System Ready! You can now process emails.")
+                    st.rerun()  # Refresh to show the Process Emails button
+                    return True
+                else:
+                    raise Exception("Authentication verification failed")
+            except Exception as verify_e:
+                st.session_state.auth_in_progress = False
+                st.session_state.auth_completed = False
+                raise Exception(f"Authentication incomplete: {str(verify_e)}")
     except Exception as e:
         st.error(f"❌ Failed: {str(e)}")
         
@@ -130,21 +140,12 @@ def initialize_system(force_fresh=False):
             3. **Ensure cookies are enabled** for this site
             4. **Follow the manual authentication steps** shown above
             """)
-        elif "authentication" in error_msg or "oauth" in error_msg or "msal" in error_msg:
-            st.error("🔐 **Authentication Failed**")
-            st.markdown("""
-            **This is normal - follow these steps:**
-            1. **Look for the authentication URL** in the logs/console below
-            2. **Copy the URL** and **paste it in a new browser tab**
-            3. **Complete Microsoft login** in the browser
-            4. **Copy the redirect URL** from browser address bar after login
-            5. **Paste it back** when prompted
-            
-            🔄 **Then try Initialize again**
-            """)
+        elif "authentication" in error_msg or "oauth" in error_msg or "msal" in error_msg or "incomplete" in error_msg:
+            st.error("🔐 **Authentication Required - Follow Steps Above**")
+            st.info("📺 Check your **terminal/console window** for the authentication URL, then follow the 3 simple steps above.")
         else:
             st.warning("⚠️ **Need Manual Authentication**")
-            st.info("🔗 **Look for authentication URL in the logs below** → Copy & paste in browser → Complete login → Try Initialize again")
+            st.info("🔗 **Look for authentication URL in the console/terminal** → Copy & paste in browser → Complete login → Try Initialize again")
         
         # Reset auth state on failure        
         st.session_state.auth_in_progress = False
@@ -209,23 +210,31 @@ def main():
     with st.expander("🔐 Authentication Instructions (READ FIRST)", expanded=True):
         st.info("**⚠️ Manual Authentication Required**")
         st.markdown("""
-        **Sign-in process always requires manual steps:**
+        **Simple 3-step process:**
         1. Click "🚀 Initialize System" below
-        2. **Copy the authentication URL** that appears in the console/logs
-        3. **Open a new browser tab and paste the URL**
-        4. Complete Microsoft login in the browser
-        5. **Copy the final redirect URL** from browser address bar
-        6. **Paste it back** in the authentication prompt
+        2. **Copy the authentication URL** that appears in console/terminal
+        3. **Paste URL in browser and complete Microsoft login**
         
-        💡 **Tip**: Have a browser tab ready before clicking Initialize!
+        That's it! Authentication completes automatically after login.
+        
+        💡 **Tip**: Keep console/terminal window visible!
         """)
     
     # Single column layout to fix the dual-text issue
     st.subheader("Controls")
     
-    # Authentication option
-    force_fresh_login = st.checkbox("🔄 Force fresh login (for new users)", value=False, 
-                                   help="Check this if you want to login with a different Microsoft account")
+    # Authentication options
+    col_auth1, col_auth2 = st.columns([2, 1])
+    with col_auth1:
+        force_fresh_login = st.checkbox("🔄 Force fresh login (for new users)", value=False, 
+                                       help="Check this if you want to login with a different Microsoft account")
+    with col_auth2:
+        if st.button("🔄 Reset Auth State", help="Clear authentication state if stuck"):
+            st.session_state.llm_system = None
+            st.session_state.auth_completed = False
+            st.session_state.auth_in_progress = False
+            st.session_state.output = ""
+            st.info("🔄 Authentication state reset. Try Initialize again.")
     
     # Mode selection
     st.subheader("⚙️ Processing Mode")
@@ -327,12 +336,7 @@ def main():
     # Persistent authentication reminder (only show if not authenticated)
     if not st.session_state.auth_completed and not st.session_state.auth_in_progress:
         st.markdown("---")
-        st.markdown("### 🔗 Need Help with Authentication?")
-        st.info("""
-        **Remember:** Authentication always requires manual steps:
-        1. Click Initialize → 2. Copy auth URL → 3. Paste in browser → 4. Login → 5. Copy final URL → 6. Paste back
-        """)
-        st.caption("💡 Keep a browser tab ready before initializing!")
+        st.info("💡 **Need help?** Expand the **'Authentication Instructions'** section above for step-by-step guidance.")
 
 if __name__ == "__main__":
     main()
