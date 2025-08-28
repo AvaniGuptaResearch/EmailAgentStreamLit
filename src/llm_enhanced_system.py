@@ -2245,7 +2245,8 @@ Keep it under 200 words and focus on actionable style elements.
                                     # Store meeting info for interactive creation
                                     self._queue_calendar_event_for_streamlit(email, analysis, meeting_suggestion)
                             except:
-                                print(f"         • 📅 CREATE CALENDAR EVENT for this meeting")
+                                # Don't show generic message - LLM already provided specific guidance
+                                pass
                     
                     # Email Summary (for long emails)
                     if summary:
@@ -2322,7 +2323,8 @@ Keep it under 200 words and focus on actionable style elements.
                                     # Store meeting info for interactive creation
                                     self._queue_calendar_event_for_streamlit(email, analysis, meeting_suggestion)
                             except:
-                                print(f"         • 📅 CREATE CALENDAR EVENT for this meeting")
+                                # Don't show generic message - LLM already provided specific guidance
+                                pass
                     
                     # Template Suggestions
                     if templates:
@@ -2382,7 +2384,8 @@ Keep it under 200 words and focus on actionable style elements.
                                     # Store meeting info for interactive creation
                                     self._queue_calendar_event_for_streamlit(email, analysis, meeting_suggestion)
                             except:
-                                print(f"         • 📅 CREATE CALENDAR EVENT for this meeting")
+                                # Don't show generic message - LLM already provided specific guidance
+                                pass
                     
                     print()
             
@@ -3564,24 +3567,24 @@ Subject: {email.subject}
 From: {email.sender} ({email.sender_email})
 Body: {email.body}
 
-COMMON SENSE RULES - WHEN NOT TO CREATE CALENDAR EVENTS:
-❌ DO NOT create events for:
-- HR announcements, company-wide events, or department meetings (you're just an attendee)
-- Group sessions, workshops, or events organized by others (they'll send proper invites)
-- Research talks, seminars, or lectures (these are announcements, not meeting requests)
-- All-hands meetings, town halls, or corporate communications
-- Training sessions, webinars, or educational events organized by others
-- Any event where you're clearly just being informed, not asked to organize
+CORE PRINCIPLE: Only create calendar events when YOU are expected to send invitations to others.
 
-✅ DO create events ONLY for:
-- Direct meeting requests where you need to organize/host
-- One-on-one meetings you're asked to schedule
-- Small group meetings where you're the organizer
-- Follow-up meetings you need to set up
+SMART DECISION LOGIC:
+❌ DO NOT create events when:
+- Someone else is organizing and will send invites (HR, professors, departments, etc.)
+- Email already contains meeting links/IDs (organizer handles invites)
+- You're being invited to something already organized
+- It's an announcement about an existing event
+
+✅ DO create events ONLY when:
+- You're asked to schedule a meeting and send invites
+- Someone requests YOU to organize a meeting
+- You need to coordinate schedules and send calendar invites
+- The email asks you to "set up a meeting" or "schedule time"
 
 INSTRUCTIONS:
-1. Apply common sense rules above FIRST - if this is an announcement/invitation, return should_create_meeting: false
-2. Only create meetings for direct scheduling requests where you're the organizer
+1. Ask yourself: "Am I being asked to ORGANIZE and SEND INVITES for this meeting?"
+2. If YES → create the meeting. If NO → don't create it.
 3. Extract meeting details if applicable - PRESERVE ORIGINAL TIMES EXACTLY
 4. If meeting is outside office hours or on weekend, suggest next business day during office hours
 5. Identify all participants mentioned in the email
@@ -3615,11 +3618,18 @@ EXAMPLES:
 - "Can we meet Monday 2-4 PM to discuss the project?" → should_create_meeting: true
 - "Let's schedule a call to review the proposal" → should_create_meeting: true
 
-❌ DON'T CREATE EVENTS FOR:
-- "HR Fuel Up Fridays - ChatGPT session on Aug 22, 11-11:30 AM" → should_create_meeting: false (HR event)
-- "Research talk by Prof. Smith on Monday 11 AM-12 PM" → should_create_meeting: false (announcement)
-- "Team all-hands meeting tomorrow at 2 PM" → should_create_meeting: false (company event)
-- "Thanks for the update" → should_create_meeting: false (no meeting requested)
+EXAMPLES:
+
+❌ DON'T CREATE (someone else organizes):
+- "Fuel Up Fridays session tomorrow 11-11:30 AM" → false (HR will send invite)
+- "Research talk Monday 11 AM-12 PM" → false (professor/department organized)
+- "Join our team meeting: Teams ID 123..." → false (already has meeting link)
+- "You're invited to..." → false (already organized)
+
+✅ CREATE (you need to organize):
+- "Can we meet Monday 2-4 PM to discuss?" → true (you schedule & invite)
+- "Please set up a call with the team" → true (you organize)
+- "Let's schedule time to review" → true (you coordinate)
 """
         
         try:
