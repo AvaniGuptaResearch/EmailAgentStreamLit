@@ -131,11 +131,20 @@ def initialize_system(force_fresh=False):
             4. **Follow the manual authentication steps** shown above
             """)
         elif "authentication" in error_msg or "oauth" in error_msg or "msal" in error_msg:
-            st.error("🔐 **Authentication Required - Follow Steps Above**")
-            st.info("📺 Check your **terminal/console window** for the authentication URL, then follow the 3 simple steps above.")
+            st.error("🔐 **Authentication Failed**")
+            st.markdown("""
+            **This is normal - follow these steps:**
+            1. **Look for the authentication URL** in the logs/console below
+            2. **Copy the URL** and **paste it in a new browser tab**
+            3. **Complete Microsoft login** in the browser
+            4. **Copy the redirect URL** from browser address bar after login
+            5. **Paste it back** when prompted
+            
+            🔄 **Then try Initialize again**
+            """)
         else:
             st.warning("⚠️ **Need Manual Authentication**")
-            st.info("🔗 **Look for authentication URL in the console/terminal** → Copy & paste in browser → Complete login → Try Initialize again")
+            st.info("🔗 **Look for authentication URL in the logs below** → Copy & paste in browser → Complete login → Try Initialize again")
         
         # Reset auth state on failure        
         st.session_state.auth_in_progress = False
@@ -200,14 +209,15 @@ def main():
     with st.expander("🔐 Authentication Instructions (READ FIRST)", expanded=True):
         st.info("**⚠️ Manual Authentication Required**")
         st.markdown("""
-        **Simple 3-step process:**
+        **Sign-in process always requires manual steps:**
         1. Click "🚀 Initialize System" below
-        2. **Copy the authentication URL** that appears in console/terminal
-        3. **Paste URL in browser and complete Microsoft login**
+        2. **Copy the authentication URL** that appears in the console/logs
+        3. **Open a new browser tab and paste the URL**
+        4. Complete Microsoft login in the browser
+        5. **Copy the final redirect URL** from browser address bar
+        6. **Paste it back** in the authentication prompt
         
-        That's it! Authentication completes automatically after login.
-        
-        💡 **Tip**: Keep console/terminal window visible!
+        💡 **Tip**: Have a browser tab ready before clicking Initialize!
         """)
     
     # Single column layout to fix the dual-text issue
@@ -317,7 +327,12 @@ def main():
     # Persistent authentication reminder (only show if not authenticated)
     if not st.session_state.auth_completed and not st.session_state.auth_in_progress:
         st.markdown("---")
-        st.info("💡 **Need help?** Expand the **'Authentication Instructions'** section above for step-by-step guidance.")
+        st.markdown("### 🔗 Need Help with Authentication?")
+        st.info("""
+        **Remember:** Authentication always requires manual steps:
+        1. Click Initialize → 2. Copy auth URL → 3. Paste in browser → 4. Login → 5. Copy final URL → 6. Paste back
+        """)
+        st.caption("💡 Keep a browser tab ready before initializing!")
 
 if __name__ == "__main__":
     main()
