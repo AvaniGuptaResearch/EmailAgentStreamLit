@@ -2219,6 +2219,33 @@ Keep it under 200 words and focus on actionable style elements.
                         print(f"      📋 Tasks:")
                         for task in analysis.task_breakdown:
                             print(f"         • {task}")
+                        
+                        # Add calendar event as a task if meeting detected
+                        if self._should_create_calendar_event(email, analysis):
+                            try:
+                                meeting_suggestion = self._get_llm_meeting_suggestion(email)
+                                if meeting_suggestion and meeting_suggestion.get('should_create_meeting'):
+                                    event_title = meeting_suggestion.get('title', f'Meeting: {email.subject[:30]}...')
+                                    event_date = meeting_suggestion.get('date', 'TBD')
+                                    event_time = f"{meeting_suggestion.get('start_time', 'TBD')}-{meeting_suggestion.get('end_time', 'TBD')}"
+                                    location = meeting_suggestion.get('location', '')
+                                    participants = meeting_suggestion.get('participants', [])
+                                    
+                                    print(f"         • 🗓️  {event_title}")
+                                    print(f"            📅 {event_date} ⏰ {event_time}")
+                                    if location:
+                                        print(f"            📍 {location}")
+                                    if participants:
+                                        attendees_str = ', '.join(participants[:2])
+                                        if len(participants) > 2:
+                                            attendees_str += f" +{len(participants) - 2} more"
+                                        print(f"            👥 {attendees_str}")
+                                    print(f"            💡 Review & create in sidebar →")
+                                    
+                                    # Store meeting info for interactive creation
+                                    self._queue_calendar_event_for_streamlit(email, analysis, meeting_suggestion)
+                            except:
+                                print(f"         • 📅 CREATE CALENDAR EVENT for this meeting")
                     
                     # Email Summary (for long emails)
                     if summary:
@@ -2269,6 +2296,33 @@ Keep it under 200 words and focus on actionable style elements.
                         print(f"      📋 Tasks:")
                         for task in analysis.task_breakdown:
                             print(f"         • {task}")
+                        
+                        # Add calendar event as a task if meeting detected
+                        if self._should_create_calendar_event(email, analysis):
+                            try:
+                                meeting_suggestion = self._get_llm_meeting_suggestion(email)
+                                if meeting_suggestion and meeting_suggestion.get('should_create_meeting'):
+                                    event_title = meeting_suggestion.get('title', f'Meeting: {email.subject[:30]}...')
+                                    event_date = meeting_suggestion.get('date', 'TBD')
+                                    event_time = f"{meeting_suggestion.get('start_time', 'TBD')}-{meeting_suggestion.get('end_time', 'TBD')}"
+                                    location = meeting_suggestion.get('location', '')
+                                    participants = meeting_suggestion.get('participants', [])
+                                    
+                                    print(f"         • 🗓️  {event_title}")
+                                    print(f"            📅 {event_date} ⏰ {event_time}")
+                                    if location:
+                                        print(f"            📍 {location}")
+                                    if participants:
+                                        attendees_str = ', '.join(participants[:2])
+                                        if len(participants) > 2:
+                                            attendees_str += f" +{len(participants) - 2} more"
+                                        print(f"            👥 {attendees_str}")
+                                    print(f"            💡 Review & create in sidebar →")
+                                    
+                                    # Store meeting info for interactive creation
+                                    self._queue_calendar_event_for_streamlit(email, analysis, meeting_suggestion)
+                            except:
+                                print(f"         • 📅 CREATE CALENDAR EVENT for this meeting")
                     
                     # Template Suggestions
                     if templates:
@@ -2302,6 +2356,33 @@ Keep it under 200 words and focus on actionable style elements.
                         print(f"      📋 Tasks:")
                         for task in analysis.task_breakdown:
                             print(f"         • {task}")
+                        
+                        # Add calendar event as a task if meeting detected
+                        if self._should_create_calendar_event(email, analysis):
+                            try:
+                                meeting_suggestion = self._get_llm_meeting_suggestion(email)
+                                if meeting_suggestion and meeting_suggestion.get('should_create_meeting'):
+                                    event_title = meeting_suggestion.get('title', f'Meeting: {email.subject[:30]}...')
+                                    event_date = meeting_suggestion.get('date', 'TBD')
+                                    event_time = f"{meeting_suggestion.get('start_time', 'TBD')}-{meeting_suggestion.get('end_time', 'TBD')}"
+                                    location = meeting_suggestion.get('location', '')
+                                    participants = meeting_suggestion.get('participants', [])
+                                    
+                                    print(f"         • 🗓️  {event_title}")
+                                    print(f"            📅 {event_date} ⏰ {event_time}")
+                                    if location:
+                                        print(f"            📍 {location}")
+                                    if participants:
+                                        attendees_str = ', '.join(participants[:2])
+                                        if len(participants) > 2:
+                                            attendees_str += f" +{len(participants) - 2} more"
+                                        print(f"            👥 {attendees_str}")
+                                    print(f"            💡 Review & create in sidebar →")
+                                    
+                                    # Store meeting info for interactive creation
+                                    self._queue_calendar_event_for_streamlit(email, analysis, meeting_suggestion)
+                            except:
+                                print(f"         • 📅 CREATE CALENDAR EVENT for this meeting")
                     
                     print()
             
@@ -2676,11 +2757,7 @@ Keep it under 200 words and focus on actionable style elements.
         is_meeting_type = analysis.email_type in ['meeting', 'event'] or analysis.action_required == 'attend'
         
         # Debug: Show what we found
-        print(f"   🔍 Calendar detection for '{email.subject[:40]}...':")
-        print(f"      - Email type: {analysis.email_type}")
-        print(f"      - Action required: {analysis.action_required}")
-        print(f"      - Has meeting keywords: {has_meeting_keywords}")
-        print(f"      - Is meeting type: {is_meeting_type}")
+        # Simplified calendar detection logging
         
         # Extract time/date information to confirm it's a scheduled event
         import re
@@ -2727,10 +2804,11 @@ Keep it under 200 words and focus on actionable style elements.
         
         if should_create:
             email.event_key = self._generate_event_key(email, analysis)
-            print(f"   📅 Calendar event will be created - Meeting: {has_meeting_keywords}, Type: {is_meeting_type}, Time: {has_time}, Date: {has_date}")
+            print(f"   📅 Calendar event will be created for meeting")
             return True
         else:
-            print(f"   📅 No calendar event - Meeting: {has_meeting_keywords}, Type: {is_meeting_type}, Time: {has_time}, Date: {has_date}")
+            # No verbose logging for non-meetings
+            pass
         
         return False
     
@@ -2738,11 +2816,8 @@ Keep it under 200 words and focus on actionable style elements.
         """Check if user confirmation is required before creating calendar events"""
         import streamlit as st
         
-        require_confirmation = True  # Default to asking for confirmation
-        if hasattr(st, 'secrets') and 'REQUIRE_CALENDAR_CONFIRMATION' in st.secrets:
-            require_confirmation = st.secrets['REQUIRE_CALENDAR_CONFIRMATION']
-        
-        return require_confirmation
+        # Simplified UX - create calendar events automatically when detected
+        return False  # No confirmation needed
     
     def _ask_calendar_confirmation(self, email: OutlookEmailData, analysis: LLMAnalysisResult) -> bool:
         """Ask user for confirmation before creating a calendar event"""
@@ -2770,9 +2845,6 @@ Keep it under 200 words and focus on actionable style elements.
             'email_type': analysis.email_type,
             'body_preview': email.body[:200] + "..." if len(email.body) > 200 else email.body
         }
-        
-        # Debug: Log that we queued this confirmation
-        print(f"🔍 DEBUG: Queued calendar confirmation for {email.subject[:30]}...")
         
         # Return None to indicate we need confirmation later (don't block main processing)
         return None
@@ -4742,21 +4814,12 @@ class EmailAutomationEngine:
         import streamlit as st
         from datetime import datetime, timedelta
         
-        # Debug: Check if there are pending confirmations
-        if 'pending_calendar_confirmations' not in st.session_state:
-            st.sidebar.write("🔍 Debug: No pending_calendar_confirmations in session_state")
+        if 'pending_calendar_confirmations' not in st.session_state or not st.session_state.pending_calendar_confirmations:
             return
-        
-        if not st.session_state.pending_calendar_confirmations:
-            st.sidebar.write("🔍 Debug: pending_calendar_confirmations is empty")
-            return
-        
-        # Debug: Show count
-        count = len(st.session_state.pending_calendar_confirmations)
-        st.sidebar.write(f"🔍 Debug: Found {count} pending calendar confirmations")
         
         st.sidebar.write("---")
-        st.sidebar.write("📅 **Calendar Event Confirmations**")
+        st.sidebar.write("📅 **Calendar Events to Review**")
+        st.sidebar.info("💡 Edit details below, then click Create Event")
         
         confirmations_to_remove = []
         
@@ -4781,9 +4844,13 @@ class EmailAutomationEngine:
                             calendar_event = self._create_calendar_event_from_email(email, analysis)
                         
                         if calendar_event and calendar_event.get('success'):
-                            st.sidebar.success(f"✅ Calendar event created for: {confirmation_data['subject'][:30]}...")
+                            st.sidebar.success(f"✅ Event created: {confirmation_data['subject'][:25]}...")
+                            # Show created event details briefly
+                            if 'event_id' in calendar_event:
+                                st.sidebar.caption(f"🔗 Event ID: {calendar_event['event_id'][:8]}...")
                         else:
-                            st.sidebar.error(f"❌ Failed to create calendar event for: {confirmation_data['subject'][:30]}...")
+                            st.sidebar.error(f"❌ Failed to create: {confirmation_data['subject'][:25]}...")
+                            st.sidebar.caption("💡 Check permissions & try again")
                     except Exception as e:
                         st.sidebar.error(f"❌ Error creating calendar event: {str(e)}")
                 else:
@@ -4899,13 +4966,13 @@ class EmailAutomationEngine:
                         st.error(f"❌ Error extracting meeting details: {str(e)}")
                     
                     st.write("---")
-                    col1, col2 = st.columns([1, 1])
+                    col1, col2 = st.columns([1.2, 0.8])
                     with col1:
-                        if st.button("✅ Create Event", key=f"{confirmation_key}_yes"):
+                        if st.button("🗓️ Create Calendar Event", key=f"{confirmation_key}_yes", use_container_width=True):
                             st.session_state[confirmation_key] = True
                             st.rerun()
                     with col2:
-                        if st.button("❌ Skip", key=f"{confirmation_key}_no"):
+                        if st.button("⏭️ Skip", key=f"{confirmation_key}_no", use_container_width=True):
                             st.session_state[confirmation_key] = False
                             st.rerun()
         
@@ -4916,6 +4983,36 @@ class EmailAutomationEngine:
             edited_details_key = f"{key}_edited_details"
             if edited_details_key in st.session_state:
                 del st.session_state[edited_details_key]
+    
+    def _queue_calendar_event_for_streamlit(self, email: OutlookEmailData, analysis: Dict, meeting_suggestion: Dict):
+        """Queue calendar event for interactive confirmation in Streamlit"""
+        import streamlit as st
+        
+        try:
+            # Initialize pending confirmations if not exists
+            if 'pending_calendar_confirmations' not in st.session_state:
+                st.session_state.pending_calendar_confirmations = {}
+            
+            # Create unique key for this confirmation
+            confirmation_key = f"calendar_event_{email.id}_{hash(email.subject)}"
+            
+            # Store the confirmation data
+            confirmation_data = {
+                'email': email,
+                'analysis': analysis,
+                'meeting_suggestion': meeting_suggestion,
+                'subject': email.subject,
+                'sender': email.sender,
+                'priority_score': analysis.priority_score if hasattr(analysis, 'priority_score') else email.priority_score,
+                'email_type': analysis.email_type if hasattr(analysis, 'email_type') else email.email_type,
+                'body_preview': email.body_preview or email.body[:100]
+            }
+            
+            # Queue for confirmation
+            st.session_state.pending_calendar_confirmations[confirmation_key] = confirmation_data
+            
+        except Exception as e:
+            print(f"   ❌ Error queuing calendar event for confirmation: {e}")
 
 class EmailHistoryExtractor:
     """Extracts relevant email history for context (inspired by inbox-zero)"""

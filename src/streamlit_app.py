@@ -72,17 +72,29 @@ if 'llm_system' not in st.session_state:
     st.session_state.llm_system = None
 if 'output' not in st.session_state:
     st.session_state.output = ""
+if 'auth_completed' not in st.session_state:
+    st.session_state.auth_completed = False
+if 'auth_in_progress' not in st.session_state:
+    st.session_state.auth_in_progress = False
 
 def initialize_system(force_fresh=False):
     """Initialize the system and authenticate"""
     if not LLM_AVAILABLE:
         st.error("❌ LLM system not available - cannot initialize")
         return False
+    
+    # Check if auth is in progress to avoid duplicate initialization
+    if st.session_state.auth_in_progress:
+        st.warning("🔄 Authentication already in progress...")
+        return False
         
     try:
         if not os.getenv('AZURE_CLIENT_ID'):
             st.error("❌ Azure credentials missing")
             return False
+        
+        # Mark auth as in progress
+        st.session_state.auth_in_progress = True
         
         # Add browser detection and warning for Safari
         st.markdown("""
@@ -98,7 +110,11 @@ def initialize_system(force_fresh=False):
             # Trigger authentication during initialization
             st.session_state.llm_system.outlook.authenticate(force_fresh=force_fresh)
         
-        st.success("✅ Ready and authenticated!")
+        # Mark auth as completed
+        st.session_state.auth_completed = True
+        st.session_state.auth_in_progress = False
+        st.success("✅ System Ready! You can now process emails.")
+        st.rerun()  # Refresh to show the Process Emails button
         return True
     except Exception as e:
         st.error(f"❌ Failed: {str(e)}")
@@ -106,24 +122,33 @@ def initialize_system(force_fresh=False):
         # Enhanced error handling for common issues
         error_msg = str(e).lower()
         if "safari" in error_msg or "timeout" in error_msg or "signal" in error_msg:
-            st.info("🦷 **Browser Compatibility Issue Detected**")
+            st.error("🦷 **Browser Compatibility Issue Detected**")
             st.markdown("""
             **Try these solutions:**
             1. **Use Chrome or Firefox** for better compatibility
             2. **Safari users**: Disable "Prevent Cross-Site Tracking" in Safari → Preferences → Privacy
             3. **Ensure cookies are enabled** for this site
-            4. **Try the manual authentication** option in the authentication screen
+            4. **Follow the manual authentication steps** shown above
             """)
-        elif "authentication" in error_msg or "oauth" in error_msg:
-            st.info("""
-            **Authentication Issue**: 
-            - Check the manual authentication option in the auth screen
-            - Ensure your Azure app registration is properly configured
-            - Try refreshing the page and authenticating again
+        elif "authentication" in error_msg or "oauth" in error_msg or "msal" in error_msg:
+            st.error("🔐 **Authentication Failed**")
+            st.markdown("""
+            **This is normal - follow these steps:**
+            1. **Look for the authentication URL** in the logs/console below
+            2. **Copy the URL** and **paste it in a new browser tab**
+            3. **Complete Microsoft login** in the browser
+            4. **Copy the redirect URL** from browser address bar after login
+            5. **Paste it back** when prompted
+            
+            🔄 **Then try Initialize again**
             """)
         else:
-            st.info("💡 **Troubleshooting**: Try refreshing the page and initializing again")
-                    
+            st.warning("⚠️ **Need Manual Authentication**")
+            st.info("🔗 **Look for authentication URL in the logs below** → Copy & paste in browser → Complete login → Try Initialize again")
+        
+        # Reset auth state on failure        
+        st.session_state.auth_in_progress = False
+        st.session_state.auth_completed = False
         return False
 
 def process_emails():
@@ -180,6 +205,21 @@ def process_emails():
 def main():
     st.title("📧Email Agent Demo")
     
+    # Authentication Instructions
+    with st.expander("🔐 Authentication Instructions (READ FIRST)", expanded=True):
+        st.info("**⚠️ Manual Authentication Required**")
+        st.markdown("""
+        **Sign-in process always requires manual steps:**
+        1. Click "🚀 Initialize System" below
+        2. **Copy the authentication URL** that appears in the console/logs
+        3. **Open a new browser tab and paste the URL**
+        4. Complete Microsoft login in the browser
+        5. **Copy the final redirect URL** from browser address bar
+        6. **Paste it back** in the authentication prompt
+        
+        💡 **Tip**: Have a browser tab ready before clicking Initialize!
+        """)
+    
     # Single column layout to fix the dual-text issue
     st.subheader("Controls")
     
@@ -223,14 +263,21 @@ def main():
     col1, col2 = st.columns([1, 1])
     
     with col1:
-        if st.button("🚀 Initialize System"):
-            initialize_system(force_fresh=force_fresh_login)
+        # Show different button states based on authentication status
+        if st.session_state.auth_in_progress:
+            st.info("🔄 Authentication in progress...")
+        elif st.session_state.llm_system and st.session_state.auth_completed:
+            st.success("✅ System Ready")
+        else:
+            if st.button("🚀 Initialize System"):
+                initialize_system(force_fresh=force_fresh_login)
     
     with col2:
-        if st.session_state.llm_system:
-            st.success("✅ System Ready")
+        if st.session_state.llm_system and st.session_state.auth_completed:
             if st.button("🤖 Process Emails"):
                 process_emails()
+        elif st.session_state.auth_in_progress:
+            st.info("⏳ Complete authentication first")
         else:
             st.warning("⚠️ Initialize system first")
     
@@ -276,6 +323,16 @@ def main():
     # Output section (no duplicate display)
     if not st.session_state.output:
         st.info("💡 Click 'Process Emails' to start email analysis")
+    
+    # Persistent authentication reminder (only show if not authenticated)
+    if not st.session_state.auth_completed and not st.session_state.auth_in_progress:
+        st.markdown("---")
+        st.markdown("### 🔗 Need Help with Authentication?")
+        st.info("""
+        **Remember:** Authentication always requires manual steps:
+        1. Click Initialize → 2. Copy auth URL → 3. Paste in browser → 4. Login → 5. Copy final URL → 6. Paste back
+        """)
+        st.caption("💡 Keep a browser tab ready before initializing!")
 
 if __name__ == "__main__":
     main()

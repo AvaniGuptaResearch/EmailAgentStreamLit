@@ -48,7 +48,6 @@ load_dotenv()
 GRAPH_API_ENDPOINT = 'https://graph.microsoft.com/v1.0'
 SCOPES = [
     'https://graph.microsoft.com/Mail.Read',
-    'https://graph.microsoft.com/Mail.Send',
     'https://graph.microsoft.com/Mail.ReadWrite',  # Required for creating drafts
     'https://graph.microsoft.com/User.Read',
     'https://graph.microsoft.com/Calendars.ReadWrite',  # Calendar integration enabled
