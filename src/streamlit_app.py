@@ -108,24 +108,14 @@ def initialize_system(force_fresh=False):
         with st.spinner("🔧 Initializing and authenticating..."):
             st.session_state.llm_system = LLMEnhancedEmailSystem()
             # Trigger authentication during initialization
-            auth_result = st.session_state.llm_system.outlook.authenticate(force_fresh=force_fresh)
-            
-            # Test if authentication actually worked by trying to get user info
-            try:
-                user_info = st.session_state.llm_system.outlook._make_graph_request("/me")
-                if user_info and user_info.get('id'):
-                    # Authentication actually succeeded
-                    st.session_state.auth_completed = True
-                    st.session_state.auth_in_progress = False
-                    st.success("✅ System Ready! You can now process emails.")
-                    st.rerun()  # Refresh to show the Process Emails button
-                    return True
-                else:
-                    raise Exception("Authentication verification failed")
-            except Exception as verify_e:
-                st.session_state.auth_in_progress = False
-                st.session_state.auth_completed = False
-                raise Exception(f"Authentication incomplete: {str(verify_e)}")
+            st.session_state.llm_system.outlook.authenticate(force_fresh=force_fresh)
+        
+        # Mark auth as completed
+        st.session_state.auth_completed = True
+        st.session_state.auth_in_progress = False
+        st.success("✅ System Ready! You can now process emails.")
+        st.rerun()  # Refresh to show the Process Emails button
+        return True
     except Exception as e:
         st.error(f"❌ Failed: {str(e)}")
         
@@ -140,7 +130,7 @@ def initialize_system(force_fresh=False):
             3. **Ensure cookies are enabled** for this site
             4. **Follow the manual authentication steps** shown above
             """)
-        elif "authentication" in error_msg or "oauth" in error_msg or "msal" in error_msg or "incomplete" in error_msg:
+        elif "authentication" in error_msg or "oauth" in error_msg or "msal" in error_msg:
             st.error("🔐 **Authentication Required - Follow Steps Above**")
             st.info("📺 Check your **terminal/console window** for the authentication URL, then follow the 3 simple steps above.")
         else:
@@ -223,18 +213,9 @@ def main():
     # Single column layout to fix the dual-text issue
     st.subheader("Controls")
     
-    # Authentication options
-    col_auth1, col_auth2 = st.columns([2, 1])
-    with col_auth1:
-        force_fresh_login = st.checkbox("🔄 Force fresh login (for new users)", value=False, 
-                                       help="Check this if you want to login with a different Microsoft account")
-    with col_auth2:
-        if st.button("🔄 Reset Auth State", help="Clear authentication state if stuck"):
-            st.session_state.llm_system = None
-            st.session_state.auth_completed = False
-            st.session_state.auth_in_progress = False
-            st.session_state.output = ""
-            st.info("🔄 Authentication state reset. Try Initialize again.")
+    # Authentication option
+    force_fresh_login = st.checkbox("🔄 Force fresh login (for new users)", value=False, 
+                                   help="Check this if you want to login with a different Microsoft account")
     
     # Mode selection
     st.subheader("⚙️ Processing Mode")
