@@ -2815,9 +2815,31 @@ Keep it under 200 words and focus on actionable style elements.
     def _should_ask_calendar_confirmation(self) -> bool:
         """Check if user confirmation is required before creating calendar events"""
         import streamlit as st
+        import os
         
-        # Simplified UX - create calendar events automatically when detected
-        return False  # No confirmation needed
+        # Check configuration setting for calendar confirmation requirement
+        def get_config(key, default=None):
+            # Check if we're running in Streamlit environment
+            is_streamlit = False
+            try:
+                if hasattr(st, 'secrets'):
+                    is_streamlit = True
+                    if key in st.secrets:
+                        value = st.secrets[key]
+                        if value is not None:
+                            return value
+            except Exception:
+                pass
+            
+            # Fallback to environment variables
+            env_value = os.getenv(key)
+            if env_value is not None:
+                return env_value.lower() == 'true' if isinstance(env_value, str) else bool(env_value)
+            
+            return default
+        
+        # Return the actual setting value (default to True - require confirmation)
+        return get_config('REQUIRE_CALENDAR_CONFIRMATION', True)
     
     def _ask_calendar_confirmation(self, email: OutlookEmailData, analysis: LLMAnalysisResult) -> bool:
         """Ask user for confirmation before creating a calendar event"""
@@ -3018,7 +3040,9 @@ Keep it under 200 words and focus on actionable style elements.
                             calendar_event = self._create_calendar_event_from_email(email, analysis)
                         elif confirmation is False:
                             print(f"   📅 User declined calendar event creation for: {email.subject}")
-                        # If confirmation is None, we're still waiting for user input
+                        else:
+                            # Confirmation is None - still waiting for user input
+                            print(f"   📅 Calendar event queued for confirmation - check sidebar to approve/decline")
                     else:
                         # Create calendar event without confirmation
                         calendar_event = self._create_calendar_event_from_email(email, analysis)
@@ -3095,7 +3119,9 @@ Keep it under 200 words and focus on actionable style elements.
                             calendar_event = self._create_calendar_event_from_email(email, analysis)
                         elif confirmation is False:
                             print(f"   📅 User declined calendar event creation for: {email.subject}")
-                        # If confirmation is None, we're still waiting for user input
+                        else:
+                            # Confirmation is None - still waiting for user input
+                            print(f"   📅 Calendar event queued for confirmation - check sidebar to approve/decline")
                     else:
                         # Create calendar event without confirmation
                         calendar_event = self._create_calendar_event_from_email(email, analysis)
@@ -3259,7 +3285,9 @@ Keep it under 200 words and focus on actionable style elements.
                             calendar_event = self._create_calendar_event_from_email(email, analysis)
                         elif confirmation is False:
                             print(f"   📅 User declined calendar event creation for: {email.subject}")
-                        # If confirmation is None, we're still waiting for user input
+                        else:
+                            # Confirmation is None - still waiting for user input
+                            print(f"   📅 Calendar event queued for confirmation - check sidebar to approve/decline")
                     else:
                         # Create calendar event without confirmation
                         calendar_event = self._create_calendar_event_from_email(email, analysis)
