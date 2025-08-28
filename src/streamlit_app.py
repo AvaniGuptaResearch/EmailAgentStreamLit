@@ -59,6 +59,7 @@ except ImportError as e:
         LLM_AVAILABLE = False  # Import failed, so system not available
 
 load_dotenv()
+
 # Page config
 st.set_page_config(
     page_title="Email Agent",
@@ -125,7 +126,6 @@ def initialize_system(force_fresh=False):
                     
         return False
 
-
 def process_emails():
     """Process emails and show real-time output"""
     if not LLM_AVAILABLE:
@@ -180,21 +180,6 @@ def process_emails():
 def main():
     st.title("📧Email Agent Demo")
     
-    # Authentication Instructions
-    with st.expander("🔐 Authentication Instructions (READ FIRST)", expanded=True):
-        st.info("**⚠️ Manual Authentication Required**")
-        st.markdown("""
-        **Sign-in process always requires manual steps:**
-        1. Click "🚀 Initialize System" below
-        2. **Copy the authentication URL** that appears in the console/logs
-        3. **Open a new browser tab and paste the URL**
-        4. Complete Microsoft login in the browser
-        5. **Copy the final redirect URL** from browser address bar
-        6. **Paste it back** in the authentication prompt
-        
-        💡 **Tip**: Have a browser tab ready before clicking Initialize!
-        """)
-    
     # Single column layout to fix the dual-text issue
     st.subheader("Controls")
     
@@ -238,21 +223,14 @@ def main():
     col1, col2 = st.columns([1, 1])
     
     with col1:
-        # Show different button states based on authentication status
-        if st.session_state.auth_in_progress:
-            st.info("🔄 Authentication in progress...")
-        elif st.session_state.llm_system and st.session_state.auth_completed:
-            st.success("✅ System Ready")
-        else:
-            if st.button("🚀 Initialize System"):
-                initialize_system(force_fresh=force_fresh_login)
+        if st.button("🚀 Initialize System"):
+            initialize_system(force_fresh=force_fresh_login)
     
     with col2:
-        if st.session_state.llm_system and st.session_state.auth_completed:
+        if st.session_state.llm_system:
+            st.success("✅ System Ready")
             if st.button("🤖 Process Emails"):
                 process_emails()
-        elif st.session_state.auth_in_progress:
-            st.info("⏳ Complete authentication first")
         else:
             st.warning("⚠️ Initialize system first")
     
@@ -298,16 +276,6 @@ def main():
     # Output section (no duplicate display)
     if not st.session_state.output:
         st.info("💡 Click 'Process Emails' to start email analysis")
-    
-    # Persistent authentication reminder (only show if not authenticated)
-    if not st.session_state.auth_completed and not st.session_state.auth_in_progress:
-        st.markdown("---")
-        st.markdown("### 🔗 Need Help with Authentication?")
-        st.info("""
-        **Remember:** Authentication always requires manual steps:
-        1. Click Initialize → 2. Copy auth URL → 3. Paste in browser → 4. Login → 5. Copy final URL → 6. Paste back
-        """)
-        st.caption("💡 Keep a browser tab ready before initializing!")
 
 if __name__ == "__main__":
     main()
