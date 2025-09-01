@@ -115,11 +115,27 @@ def initialize_system(force_fresh=False):
             4. **Try the manual authentication** option in the authentication screen
             """)
         elif "authentication" in error_msg or "oauth" in error_msg:
-            st.info("""
-            **Authentication Issue**: 
-            - Check the manual authentication option in the auth screen
-            - Ensure your Azure app registration is properly configured
-            - Try refreshing the page and authenticating again
+            st.error("🔐 **Authentication Required - Follow These Steps:**")
+            st.markdown("""
+            **Manual authentication needed:**
+            
+            **Step 1:** Look for a URL that starts with `https://login.microsoftonline.com/` in the console output below
+            
+            **Step 2:** Copy that entire URL
+            
+            **Step 3:** Open a new browser tab and paste the URL there
+            
+            **Step 4:** Complete Microsoft login in the browser
+            
+            **Step 5:** After login, you'll be redirected to a URL starting with `http://localhost:8503/?code=...`
+            
+            **Step 6:** Copy that entire redirect URL from your browser's address bar
+            
+            **Step 7:** Come back here and paste the redirect URL when prompted in the console
+            
+            **Step 8:** Click "🚀 Initialize System" again
+            
+            💡 **Tip:** Keep this browser tab open while you do the authentication!
             """)
         else:
             st.info("💡 **Troubleshooting**: Try refreshing the page and initializing again")

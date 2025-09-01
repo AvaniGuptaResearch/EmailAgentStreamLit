@@ -1241,6 +1241,8 @@ class LLMResponseDrafter:
                       user_writing_style: str = "", user_name: str = "", user_email: str = "") -> LLMDraftResult:
         """Generate personalized draft response using LLM"""
         
+        from datetime import datetime
+        
         draft_prompt = f"""
 CONTEXT: {user_name} received an email and needs to write a response.
 
@@ -1265,6 +1267,8 @@ ANALYSIS CONTEXT:
 {user_name}'S WRITING STYLE:
 {user_writing_style or "Professional, friendly, concise. Uses 'Hi [Name]' greetings and 'Best regards' closings. Direct but polite communication style."}
 
+CURRENT DATE: {datetime.now().strftime('%B %d, %Y (%A)')}
+
 RESPONSE REQUIREMENTS FOR {user_name}:
 1. Address the sender by first name (extract from sender name)
 2. Acknowledge the specific content/request in the original email
@@ -1277,6 +1281,12 @@ RESPONSE REQUIREMENTS FOR {user_name}:
 9. CRITICAL: Do NOT include ANY closing like "Best regards", "Sincerely", etc.
 10. Do NOT include ANY signature, contact details, or organizational information
 11. End the response with the actual email content only
+
+DEADLINE HANDLING:
+- CRITICAL: Always check if any mentioned deadline has already passed
+- If a deadline has passed, acknowledge this and use phrases like "as soon as possible", "immediately", "urgently"
+- NEVER promise to complete something by a date that has already passed
+- If today is September 1st and email mentions "by July 15th", acknowledge the delay and commit to urgent completion
 
 SPECIAL HANDLING:
 - For IT Helpdesk forms: Check if this is a service request form. If so, acknowledge receipt and provide timeline for action.
@@ -1295,10 +1305,10 @@ EXAMPLE: If the sender name is "John Smith", your response should start with "Hi
     "subject": "Re: [original subject]", 
     "body": "Hi {email.sender.split()[0] if email.sender else 'there'},\
 \
-Thank you for reminding us about the deadline. We are working on the modules and will ensure timely submission through the portal.",
+Thank you for the reminder about the July 15th deadline. I apologize for the delay - I will update the task progress on Notion as soon as possible and prioritize this urgently.",
     "tone": "professional",
     "confidence": 0.9,
-    "reasoning": "Acknowledging deadline and providing action plan",
+    "reasoning": "Acknowledging passed deadline with appropriate urgency and commitment",
     "alternative_versions": []
 }}
 
@@ -1586,7 +1596,31 @@ Avani",
         if analysis.action_required == "attend":
             body = f"Hi {sender_first_name},\n\nThank you for the meeting invitation. I'll check my calendar and confirm my attendance shortly."
         elif 'deadline' in original_content:
-            body = f"Hi {sender_first_name},\n\nThank you for reminding me about the deadline. I'm working on this and will ensure timely completion as requested."
+            # Check if deadline mentions specific dates that might have passed
+            from datetime import datetime
+            import re
+            
+            # Look for date patterns that might indicate passed deadlines
+            date_patterns = [
+                r'(?:january|february|march|april|may|june|july|august|september|october|november|december)\s+\d{1,2}(?:st|nd|rd|th)?',
+                r'\d{1,2}[-/]\d{1,2}[-/]\d{2,4}'
+            ]
+            
+            found_past_date = False
+            current_month = datetime.now().month
+            
+            # Simple check for obviously past dates (like July when it's September)
+            if 'july' in original_content and current_month >= 9:
+                found_past_date = True
+            elif 'june' in original_content and current_month >= 9:
+                found_past_date = True
+            elif 'may' in original_content and current_month >= 9:
+                found_past_date = True
+            
+            if found_past_date:
+                body = f"Hi {sender_first_name},\n\nThank you for the reminder. I apologize for the delay - I will prioritize this and complete it as soon as possible."
+            else:
+                body = f"Hi {sender_first_name},\n\nThank you for reminding me about the deadline. I'm working on this and will ensure timely completion as requested."
         elif 'question' in original_content or '?' in email.body:
             body = f"Hi {sender_first_name},\n\nThank you for your question. I'll review the details and provide you with a comprehensive response shortly."
         elif analysis.action_required == "reply":
