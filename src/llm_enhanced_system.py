@@ -3981,21 +3981,24 @@ EXAMPLES:
             if 'prioritized_emails' not in st.session_state:
                 st.session_state.prioritized_emails = []
             
+            # analyzed_emails is a list of tuples (email, analysis_dict)
             # Sort emails by priority score (highest first)
-            sorted_emails = sorted(analyzed_emails, key=lambda x: x.priority_score, reverse=True)
+            sorted_emails = sorted(analyzed_emails, key=lambda x: x[1]['core_analysis'].priority_score, reverse=True)
             
             # Store top emails with essential info for display
             prioritized_data = []
-            for email in sorted_emails[:10]:  # Store top 10 emails
+            for email, analysis_dict in sorted_emails[:10]:  # Store top 10 emails
+                core_analysis = analysis_dict['core_analysis']
+                
                 email_data = {
                     'id': email.id,
                     'subject': email.subject,
                     'sender': email.sender,
                     'sender_email': email.sender_email,
-                    'priority_score': email.priority_score,
-                    'urgency_level': getattr(email, 'urgency_level', 'Medium'),
-                    'email_type': getattr(email, 'email_type', 'Unknown'),
-                    'action_required': getattr(email, 'action_required', 'Review'),
+                    'priority_score': core_analysis.priority_score,
+                    'urgency_level': getattr(core_analysis, 'urgency_level', 'Medium'),
+                    'email_type': getattr(core_analysis, 'email_type', 'Unknown'),
+                    'action_required': getattr(core_analysis, 'action_required', 'Review'),
                     'received_time': email.received_datetime.strftime('%Y-%m-%d %H:%M') if hasattr(email, 'received_datetime') and email.received_datetime else 'Unknown',
                     'body_preview': email.body[:100] + '...' if len(email.body) > 100 else email.body,
                     'is_read': getattr(email, 'is_read', True),
@@ -4011,6 +4014,8 @@ EXAMPLES:
             
         except Exception as e:
             print(f"❌ Error storing prioritized emails in session: {e}")
+            import traceback
+            traceback.print_exc()
     
     def get_prioritized_emails_from_session(self):
         """Get prioritized emails from session state for display"""
