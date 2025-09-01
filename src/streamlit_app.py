@@ -72,6 +72,10 @@ if 'llm_system' not in st.session_state:
     st.session_state.llm_system = None
 if 'output' not in st.session_state:
     st.session_state.output = ""
+if 'prioritized_emails' not in st.session_state:
+    st.session_state.prioritized_emails = []
+if 'prioritized_emails_timestamp' not in st.session_state:
+    st.session_state.prioritized_emails_timestamp = None
 
 def initialize_system(force_fresh=False):
     """Initialize the system and authenticate"""
@@ -281,6 +285,50 @@ def main():
                     st.bar_chart(priority_df.set_index('Priority Range'))
         except Exception as e:
             pass  # Silently handle any errors in priority summary display
+    
+    # Show Prioritized Email List
+    if st.session_state.llm_system:
+        try:
+            prioritized_emails = st.session_state.llm_system.get_prioritized_emails_from_session()
+            if prioritized_emails:
+                col1, col2 = st.columns([3, 1])
+                with col1:
+                    st.subheader("📋 Prioritized Email List")
+                with col2:
+                    if st.button("🗑️ Clear List", help="Clear the prioritized email list"):
+                        st.session_state.prioritized_emails = []
+                        st.session_state.prioritized_emails_timestamp = None
+                        st.rerun()
+                
+                # Show timestamp of when list was created
+                if hasattr(st.session_state, 'prioritized_emails_timestamp'):
+                    st.caption(f"Last updated: {st.session_state.prioritized_emails_timestamp}")
+                
+                # Create expandable sections for each email
+                for i, email in enumerate(prioritized_emails[:5]):  # Show top 5 emails
+                    priority_color = "🔴" if email['priority_score'] >= 90 else "🟡" if email['priority_score'] >= 70 else "🟢"
+                    
+                    with st.expander(f"{priority_color} {email['priority_score']:.1f} - {email['subject'][:50]}{'...' if len(email['subject']) > 50 else ''}", expanded=i==0):
+                        col1, col2 = st.columns([2, 1])
+                        
+                        with col1:
+                            st.write(f"**From:** {email['sender']}")
+                            st.write(f"**Type:** {email['email_type']}")
+                            st.write(f"**Action:** {email['action_required']}")
+                            st.write(f"**Preview:** {email['body_preview']}")
+                        
+                        with col2:
+                            st.metric("Priority", f"{email['priority_score']:.1f}")
+                            st.write(f"**Received:** {email['received_time']}")
+                            if email['has_attachments']:
+                                st.write("📎 Has attachments")
+                            if not email['is_read']:
+                                st.write("🔴 Unread")
+                
+                if len(prioritized_emails) > 5:
+                    st.info(f"Showing top 5 of {len(prioritized_emails)} prioritized emails")
+        except Exception as e:
+            pass  # Silently handle any errors in prioritized email display
     
     # Show calendar confirmations in sidebar
     if hasattr(st.session_state, 'llm_system') and st.session_state.llm_system is not None:

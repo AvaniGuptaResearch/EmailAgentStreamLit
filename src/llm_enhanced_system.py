@@ -2043,6 +2043,21 @@ Keep it under 200 words and focus on actionable style elements.
         print("=" * 40)
         print(f"🔧 Current mode: {self.get_current_mode()}")
         
+        # SAFETY CAP: Maximum absolute limit to prevent system overload
+        def get_safety_config(key, default):
+            try:
+                import streamlit as st
+                if hasattr(st, 'secrets') and key in st.secrets:
+                    return int(st.secrets[key])
+            except:
+                pass
+            return default
+        
+        ABSOLUTE_MAX_EMAILS = get_safety_config('ABSOLUTE_MAX_EMAILS', 500)
+        if max_emails > ABSOLUTE_MAX_EMAILS:
+            print(f"⚠️ SAFETY CAP: Limiting processing from {max_emails} to {ABSOLUTE_MAX_EMAILS} emails to prevent timeout")
+            max_emails = ABSOLUTE_MAX_EMAILS
+        
         try:
             # Get user info (authentication should already be done in initialization)
             user_info = self.outlook.get_user_info()
@@ -2159,24 +2174,38 @@ Keep it under 200 words and focus on actionable style elements.
                     unread_limit = 0
                 
                 if unread_limit > 0:
-                    print(f"📬 Processing up to {unread_limit} unread emails...")
-                    emails = self.outlook.get_recent_emails(max_results=unread_limit, hours_back=72)  # hours_back ignored in unread mode
+                    # Apply safety cap to unread limit
+                    safe_unread_limit = min(unread_limit, ABSOLUTE_MAX_EMAILS)
+                    if safe_unread_limit < unread_limit:
+                        print(f"⚠️ SAFETY CAP: Limiting unread processing from {unread_limit} to {safe_unread_limit} emails")
+                    print(f"📬 Processing up to {safe_unread_limit} unread emails...")
+                    emails = self.outlook.get_recent_emails(max_results=safe_unread_limit, hours_back=72)  # hours_back ignored in unread mode
                 else:
-                    print(f"📬 Processing ALL unread emails (no limit)...")
-                    emails = self.outlook.get_recent_emails(max_results=1000, hours_back=72)  # Large number to get all unread
+                    print(f"📬 Processing ALL unread emails (capped at {ABSOLUTE_MAX_EMAILS} for safety)...")
+                    emails = self.outlook.get_recent_emails(max_results=ABSOLUTE_MAX_EMAILS, hours_back=72)  # Safety cap instead of 1000
             else:
                 # First, get recent emails from past 3 days (72 hours) to catch deadline emails
                 print(f"🔍 Scanning past 72 hours for critical emails...")
                 emails = self.outlook.get_recent_emails(max_results=initial_max, hours_back=72)
                 
-                # Also try to get more emails if we're not getting enough (but respect mode limits)
+                # Also try to get more emails if we're not getting enough (but respect mode limits and safety cap)
                 if len(emails) < 5:  # Reduced threshold for expansion
-                    print(f"📧 Only found {len(emails)} emails, expanding search to past 7 days...")
-                    emails = self.outlook.get_recent_emails(max_results=extended_max, hours_back=168)  # 7 days
+                    safe_extended_max = min(extended_max, ABSOLUTE_MAX_EMAILS)
+                    if safe_extended_max < extended_max:
+                        print(f"⚠️ SAFETY CAP: Limiting extended search from {extended_max} to {safe_extended_max} emails")
+                    print(f"📧 Only found {len(emails)} emails, expanding search to past 7 days (max {safe_extended_max})...")
+                    emails = self.outlook.get_recent_emails(max_results=safe_extended_max, hours_back=168)  # 7 days
             
             # For now, let's focus on the improved time window which should catch your deadline email
             # The Graph API search has compatibility issues that need further investigation
             print(f"📧 Analyzing {len(emails)} emails from extended time window...")
+            
+            # Warn user about large processing times
+            if len(emails) > 100:
+                print(f"⚠️ LARGE INBOX DETECTED: {len(emails)} emails found")
+                print(f"   This may take several minutes to process. Consider using Lite or Ultra-Lite mode for faster processing.")
+                if len(emails) > 300:
+                    print(f"   🕒 ESTIMATED TIME: {len(emails) * 2 // 60} minutes in current mode")
             
             # Debug: Check if we have the deadline email in our list
             print(f"🔍 Checking for deadline keywords in {len(emails)} emails...")
@@ -2726,9 +2755,11 @@ Keep it under 200 words and focus on actionable style elements.
             print(f"   6. Review email summaries to save reading time")
             print(f"📁 All drafts saved to: Outlook > Drafts folder")
             
-            # Create prioritized email list draft in Outlook
+            # Create prioritized email list draft in Outlook AND store in session state
             try:
                 self._create_priority_email_list_draft(analyzed_emails, current_user_email)
+                # Store prioritized emails in session state for persistent display
+                self._store_prioritized_emails_in_session(analyzed_emails)
             except Exception as e:
                 print(f"⚠️ Could not create priority email list draft: {e}")
             
@@ -3058,9 +3089,31 @@ Keep it under 200 words and focus on actionable style elements.
         """ULTRA FAST analysis - keyword-based, LLM for drafting only"""
         analyzed_emails = []
         
+        import time
+        start_time = time.time()
+        
+        # Get configurable timeout
+        def get_safety_config(key, default):
+            try:
+                import streamlit as st
+                if hasattr(st, 'secrets') and key in st.secrets:
+                    return int(st.secrets[key])
+            except:
+                pass
+            return default
+        
+        TIMEOUT_SECONDS = get_safety_config('TIMEOUT_ULTRA_LITE_SECONDS', 180)  # 3 minutes default
+        
         print(f"🏃 ULTRA LITE: Keyword analysis only...")
         
-        for email in emails:
+        for i, email in enumerate(emails):
+            # Check timeout every 20 emails (since ultra-lite is fastest)
+            if i > 0 and i % 20 == 0:
+                elapsed = time.time() - start_time
+                if elapsed > TIMEOUT_SECONDS:
+                    print(f"⏰ TIMEOUT: Ultra-lite analysis stopped after {elapsed:.1f}s to prevent system overload")
+                    print(f"✅ Successfully processed {len(analyzed_emails)} emails before timeout")
+                    break
             try:
                 print(f"   🏃 Quick scan: {email.subject[:30]}...")
                 
@@ -3127,9 +3180,31 @@ Keep it under 200 words and focus on actionable style elements.
         """FAST LLM analysis - core features only"""
         analyzed_emails = []
         
+        import time
+        start_time = time.time()
+        
+        # Get configurable timeout
+        def get_safety_config(key, default):
+            try:
+                import streamlit as st
+                if hasattr(st, 'secrets') and key in st.secrets:
+                    return int(st.secrets[key])
+            except:
+                pass
+            return default
+        
+        TIMEOUT_SECONDS = get_safety_config('TIMEOUT_LITE_MODE_SECONDS', 240)  # 4 minutes default
+        
         print(f"⚡ LITE: Fast LLM analysis...")
         
-        for email in emails:
+        for i, email in enumerate(emails):
+            # Check timeout every 10 emails (since lite is faster)
+            if i > 0 and i % 10 == 0:
+                elapsed = time.time() - start_time
+                if elapsed > TIMEOUT_SECONDS:
+                    print(f"⏰ TIMEOUT: Lite analysis stopped after {elapsed:.1f}s to prevent system overload")
+                    print(f"✅ Successfully processed {len(analyzed_emails)} emails before timeout")
+                    break
             try:
                 print(f"   ⚡ Analyzing: {email.subject[:40]}...")
                 
@@ -3262,9 +3337,36 @@ Keep it under 200 words and focus on actionable style elements.
         """Comprehensive analysis with all features"""
         analyzed_emails = []
         
-        for email in emails:
+        import time
+        start_time = time.time()
+        
+        # Get configurable timeout
+        def get_safety_config(key, default):
             try:
-                print(f"   📧 Analyzing: {email.subject[:40]}...")
+                import streamlit as st
+                if hasattr(st, 'secrets') and key in st.secrets:
+                    return int(st.secrets[key])
+            except:
+                pass
+            return default
+        
+        TIMEOUT_SECONDS = get_safety_config('TIMEOUT_DEEP_MODE_SECONDS', 300)  # 5 minutes default
+        
+        for i, email in enumerate(emails):
+            # Show progress every 10 emails
+            if i > 0 and i % 10 == 0:
+                progress_pct = (i / len(emails)) * 100
+                print(f"📈 Progress: {i}/{len(emails)} emails ({progress_pct:.1f}%)")
+            
+            # Check timeout every few emails
+            if i > 0 and i % 5 == 0:
+                elapsed = time.time() - start_time
+                if elapsed > TIMEOUT_SECONDS:
+                    print(f"⏰ TIMEOUT: Analysis stopped after {elapsed:.1f}s to prevent system overload")
+                    print(f"✅ Successfully processed {len(analyzed_emails)} emails before timeout")
+                    break
+            try:
+                print(f"   📧 {i+1}/{len(emails)} Analyzing: {email.subject[:40]}...")
                 
                 # Enhanced context with thread analysis
                 thread_context = self._analyze_email_thread(email)
@@ -3868,6 +3970,56 @@ EXAMPLES:
         except Exception as e:
             print(f"❌ Error creating priority email list draft: {e}")
             return {'success': False, 'error': str(e)}
+    
+    def _store_prioritized_emails_in_session(self, analyzed_emails):
+        """Store prioritized emails in session state for persistent display"""
+        import streamlit as st
+        from datetime import datetime
+        
+        try:
+            # Initialize session state for prioritized emails
+            if 'prioritized_emails' not in st.session_state:
+                st.session_state.prioritized_emails = []
+            
+            # Sort emails by priority score (highest first)
+            sorted_emails = sorted(analyzed_emails, key=lambda x: x.priority_score, reverse=True)
+            
+            # Store top emails with essential info for display
+            prioritized_data = []
+            for email in sorted_emails[:10]:  # Store top 10 emails
+                email_data = {
+                    'id': email.id,
+                    'subject': email.subject,
+                    'sender': email.sender,
+                    'sender_email': email.sender_email,
+                    'priority_score': email.priority_score,
+                    'urgency_level': getattr(email, 'urgency_level', 'Medium'),
+                    'email_type': getattr(email, 'email_type', 'Unknown'),
+                    'action_required': getattr(email, 'action_required', 'Review'),
+                    'received_time': email.received_datetime.strftime('%Y-%m-%d %H:%M') if hasattr(email, 'received_datetime') and email.received_datetime else 'Unknown',
+                    'body_preview': email.body[:100] + '...' if len(email.body) > 100 else email.body,
+                    'is_read': getattr(email, 'is_read', True),
+                    'has_attachments': getattr(email, 'has_attachments', False)
+                }
+                prioritized_data.append(email_data)
+            
+            # Store in session state with timestamp
+            st.session_state.prioritized_emails = prioritized_data
+            st.session_state.prioritized_emails_timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            
+            print(f"✅ Stored {len(prioritized_data)} prioritized emails in session state")
+            
+        except Exception as e:
+            print(f"❌ Error storing prioritized emails in session: {e}")
+    
+    def get_prioritized_emails_from_session(self):
+        """Get prioritized emails from session state for display"""
+        import streamlit as st
+        
+        if 'prioritized_emails' not in st.session_state:
+            return []
+        
+        return st.session_state.prioritized_emails
     
     def show_pending_calendar_confirmations(self):
         """Show pending calendar confirmations in sidebar after main processing with editable preview fields"""
