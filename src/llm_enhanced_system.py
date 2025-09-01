@@ -3834,6 +3834,211 @@ EXAMPLES:
         except Exception as e:
             print(f"❌ Error creating priority email list draft: {e}")
             return {'success': False, 'error': str(e)}
+    
+    def show_pending_calendar_confirmations(self):
+        """Show pending calendar confirmations in sidebar after main processing with editable preview fields"""
+        import streamlit as st
+        from datetime import datetime, timedelta
+        
+        if 'pending_calendar_confirmations' not in st.session_state or not st.session_state.pending_calendar_confirmations:
+            return
+        
+        st.sidebar.write("---")
+        st.sidebar.write("📅 **Calendar Events to Review**")
+        st.sidebar.info("💡 Edit details below, then click Create Event")
+        
+        confirmations_to_remove = []
+        
+        for confirmation_key, confirmation_data in st.session_state.pending_calendar_confirmations.items():
+            if confirmation_key in st.session_state:
+                # Decision already made, process it
+                decision = st.session_state[confirmation_key]
+                if decision:
+                    # Create calendar event with user-edited details
+                    try:
+                        email = confirmation_data['email']
+                        analysis = confirmation_data['analysis']
+                        
+                        # Check if user has edited the event details
+                        edited_details_key = f"{confirmation_key}_edited_details"
+                        if edited_details_key in st.session_state:
+                            # Use edited details to create custom calendar event
+                            edited_details = st.session_state[edited_details_key]
+                            calendar_event = self._create_calendar_event_with_custom_details(email, edited_details)
+                        else:
+                            # Use original method
+                            calendar_event = self._create_calendar_event_from_email(email, analysis)
+                        
+                        if calendar_event and calendar_event.get('success'):
+                            st.sidebar.success(f"✅ Event created: {confirmation_data['subject'][:25]}...")
+                            # Show created event details briefly
+                            if 'event_id' in calendar_event:
+                                st.sidebar.caption(f"🔗 Event ID: {calendar_event['event_id'][:8]}...")
+                        else:
+                            st.sidebar.error(f"❌ Failed to create: {confirmation_data['subject'][:25]}...")
+                            st.sidebar.caption("💡 Check permissions & try again")
+                    except Exception as e:
+                        st.sidebar.error(f"❌ Error creating calendar event: {str(e)}")
+                else:
+                    st.sidebar.info(f"⏭️ Skipped calendar event for: {confirmation_data['subject'][:30]}...")
+                
+                confirmations_to_remove.append(confirmation_key)
+            else:
+                # Show enhanced confirmation dialog with editable preview fields
+                with st.sidebar.expander(f"📧 {confirmation_data['subject'][:30]}...", expanded=True):
+                    st.write(f"**From:** {confirmation_data['sender']}")
+                    st.write(f"**Priority:** {confirmation_data['priority_score']:.1f}/100")
+                    st.write(f"**Type:** {confirmation_data['email_type']}")
+                    st.write(f"**Preview:** {confirmation_data['body_preview']}")
+                    
+                    # Get LLM meeting suggestion for preview
+                    try:
+                        email = confirmation_data['email']
+                        meeting_suggestion = self._get_llm_meeting_suggestion(email)
+                        
+                        if meeting_suggestion and meeting_suggestion.get('should_create_meeting'):
+                            st.write("---")
+                            st.write("**📝 Edit Event Details:**")
+                            
+                            # Event Title
+                            default_title = meeting_suggestion.get('title', f"Meeting: {email.subject}")
+                            event_title = st.text_input(
+                                "Event Title:",
+                                value=default_title,
+                                key=f"{confirmation_key}_title"
+                            )
+                            
+                            # Date and Time
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                try:
+                                    default_date = datetime.strptime(meeting_suggestion.get('date', datetime.now().strftime('%Y-%m-%d')), '%Y-%m-%d').date()
+                                except:
+                                    default_date = datetime.now().date()
+                                
+                                event_date = st.date_input(
+                                    "Date:",
+                                    value=default_date,
+                                    key=f"{confirmation_key}_date"
+                                )
+                            
+                            with col2:
+                                # Time inputs
+                                default_start = meeting_suggestion.get('start_time', '14:00')
+                                default_end = meeting_suggestion.get('end_time', '15:00')
+                                
+                                try:
+                                    start_hour, start_min = map(int, default_start.split(':'))
+                                    end_hour, end_min = map(int, default_end.split(':'))
+                                except:
+                                    start_hour, start_min = 14, 0
+                                    end_hour, end_min = 15, 0
+                                
+                                start_time = st.time_input(
+                                    "Start Time:",
+                                    value=datetime.now().replace(hour=start_hour, minute=start_min).time(),
+                                    key=f"{confirmation_key}_start_time"
+                                )
+                                
+                                end_time = st.time_input(
+                                    "End Time:",
+                                    value=datetime.now().replace(hour=end_hour, minute=end_min).time(),
+                                    key=f"{confirmation_key}_end_time"
+                                )
+                            
+                            # Location
+                            default_location = meeting_suggestion.get('location', '')
+                            event_location = st.text_input(
+                                "Location:",
+                                value=default_location,
+                                key=f"{confirmation_key}_location"
+                            )
+                            
+                            # Description/Notes
+                            default_notes = meeting_suggestion.get('notes', '')
+                            event_description = st.text_area(
+                                "Description/Notes:",
+                                value=default_notes,
+                                height=100,
+                                key=f"{confirmation_key}_description"
+                            )
+                            
+                            # Participants (read-only for now, extracted from LLM)
+                            participants = meeting_suggestion.get('participants', [])
+                            if participants:
+                                st.write("**👥 Detected Participants:**")
+                                for participant in participants:
+                                    st.write(f"   • {participant}")
+                            
+                            # Store edited details in session state
+                            edited_details = {
+                                'title': event_title,
+                                'date': event_date.strftime('%Y-%m-%d'),
+                                'start_time': start_time.strftime('%H:%M'),
+                                'end_time': end_time.strftime('%H:%M'),
+                                'location': event_location,
+                                'description': event_description,
+                                'participants': participants,
+                                'purpose': meeting_suggestion.get('purpose', ''),
+                                'original_email_subject': email.subject,
+                                'original_email_body': email.body
+                            }
+                            st.session_state[f"{confirmation_key}_edited_details"] = edited_details
+                            
+                        else:
+                            st.warning("⚠️ Could not extract meeting details from email")
+                            
+                    except Exception as e:
+                        st.error(f"❌ Error extracting meeting details: {str(e)}")
+                    
+                    st.write("---")
+                    col1, col2 = st.columns([1.2, 0.8])
+                    with col1:
+                        if st.button("🗓️ Create Calendar Event", key=f"{confirmation_key}_yes", use_container_width=True):
+                            st.session_state[confirmation_key] = True
+                            st.rerun()
+                    with col2:
+                        if st.button("⏭️ Skip", key=f"{confirmation_key}_no", use_container_width=True):
+                            st.session_state[confirmation_key] = False
+                            st.rerun()
+        
+        # Clean up processed confirmations
+        for key in confirmations_to_remove:
+            del st.session_state.pending_calendar_confirmations[key]
+            # Also clean up edited details
+            edited_details_key = f"{key}_edited_details"
+            if edited_details_key in st.session_state:
+                del st.session_state[edited_details_key]
+    
+    def _queue_calendar_event_for_streamlit(self, email: OutlookEmailData, analysis: Dict, meeting_suggestion: Dict):
+        """Queue calendar event for interactive confirmation in Streamlit"""
+        import streamlit as st
+        
+        try:
+            # Initialize pending confirmations if not exists
+            if 'pending_calendar_confirmations' not in st.session_state:
+                st.session_state.pending_calendar_confirmations = {}
+            
+            # Create unique key for this confirmation
+            confirmation_key = f"calendar_event_{email.id}_{hash(email.subject)}"
+            
+            # Store the confirmation data
+            confirmation_data = {
+                'email': email,
+                'analysis': analysis,
+                'meeting_suggestion': meeting_suggestion,
+                'subject': email.subject,
+                'sender': email.sender,
+                'priority_score': analysis.priority_score if hasattr(analysis, 'priority_score') else email.priority_score,
+                'email_type': analysis.email_type if hasattr(analysis, 'email_type') else email.email_type,
+                'body_preview': email.body_preview or email.body[:100]
+            }
+            
+            # Queue for confirmation
+            st.session_state.pending_calendar_confirmations[confirmation_key] = confirmation_data
+            
+        except Exception as e:
+            print(f"   ❌ Error queuing calendar event for confirmation: {e}")
 
 class WritingStyleAnalyzer:
     """Analyzes user's writing style from sent emails (inspired by inbox-zero)"""
@@ -4867,211 +5072,6 @@ class EmailAutomationEngine:
         except Exception as e:
             print(f"   ❌ Error extracting event details: {e}")
             return None
-
-    def show_pending_calendar_confirmations(self):
-        """Show pending calendar confirmations in sidebar after main processing with editable preview fields"""
-        import streamlit as st
-        from datetime import datetime, timedelta
-        
-        if 'pending_calendar_confirmations' not in st.session_state or not st.session_state.pending_calendar_confirmations:
-            return
-        
-        st.sidebar.write("---")
-        st.sidebar.write("📅 **Calendar Events to Review**")
-        st.sidebar.info("💡 Edit details below, then click Create Event")
-        
-        confirmations_to_remove = []
-        
-        for confirmation_key, confirmation_data in st.session_state.pending_calendar_confirmations.items():
-            if confirmation_key in st.session_state:
-                # Decision already made, process it
-                decision = st.session_state[confirmation_key]
-                if decision:
-                    # Create calendar event with user-edited details
-                    try:
-                        email = confirmation_data['email']
-                        analysis = confirmation_data['analysis']
-                        
-                        # Check if user has edited the event details
-                        edited_details_key = f"{confirmation_key}_edited_details"
-                        if edited_details_key in st.session_state:
-                            # Use edited details to create custom calendar event
-                            edited_details = st.session_state[edited_details_key]
-                            calendar_event = self._create_calendar_event_with_custom_details(email, edited_details)
-                        else:
-                            # Use original method
-                            calendar_event = self._create_calendar_event_from_email(email, analysis)
-                        
-                        if calendar_event and calendar_event.get('success'):
-                            st.sidebar.success(f"✅ Event created: {confirmation_data['subject'][:25]}...")
-                            # Show created event details briefly
-                            if 'event_id' in calendar_event:
-                                st.sidebar.caption(f"🔗 Event ID: {calendar_event['event_id'][:8]}...")
-                        else:
-                            st.sidebar.error(f"❌ Failed to create: {confirmation_data['subject'][:25]}...")
-                            st.sidebar.caption("💡 Check permissions & try again")
-                    except Exception as e:
-                        st.sidebar.error(f"❌ Error creating calendar event: {str(e)}")
-                else:
-                    st.sidebar.info(f"⏭️ Skipped calendar event for: {confirmation_data['subject'][:30]}...")
-                
-                confirmations_to_remove.append(confirmation_key)
-            else:
-                # Show enhanced confirmation dialog with editable preview fields
-                with st.sidebar.expander(f"📧 {confirmation_data['subject'][:30]}...", expanded=True):
-                    st.write(f"**From:** {confirmation_data['sender']}")
-                    st.write(f"**Priority:** {confirmation_data['priority_score']:.1f}/100")
-                    st.write(f"**Type:** {confirmation_data['email_type']}")
-                    st.write(f"**Preview:** {confirmation_data['body_preview']}")
-                    
-                    # Get LLM meeting suggestion for preview
-                    try:
-                        email = confirmation_data['email']
-                        meeting_suggestion = self._get_llm_meeting_suggestion(email)
-                        
-                        if meeting_suggestion and meeting_suggestion.get('should_create_meeting'):
-                            st.write("---")
-                            st.write("**📝 Edit Event Details:**")
-                            
-                            # Event Title
-                            default_title = meeting_suggestion.get('title', f"Meeting: {email.subject}")
-                            event_title = st.text_input(
-                                "Event Title:",
-                                value=default_title,
-                                key=f"{confirmation_key}_title"
-                            )
-                            
-                            # Date and Time
-                            col1, col2 = st.columns(2)
-                            with col1:
-                                try:
-                                    default_date = datetime.strptime(meeting_suggestion.get('date', datetime.now().strftime('%Y-%m-%d')), '%Y-%m-%d').date()
-                                except:
-                                    default_date = datetime.now().date()
-                                
-                                event_date = st.date_input(
-                                    "Date:",
-                                    value=default_date,
-                                    key=f"{confirmation_key}_date"
-                                )
-                            
-                            with col2:
-                                # Time inputs
-                                default_start = meeting_suggestion.get('start_time', '14:00')
-                                default_end = meeting_suggestion.get('end_time', '15:00')
-                                
-                                try:
-                                    start_hour, start_min = map(int, default_start.split(':'))
-                                    end_hour, end_min = map(int, default_end.split(':'))
-                                except:
-                                    start_hour, start_min = 14, 0
-                                    end_hour, end_min = 15, 0
-                                
-                                start_time = st.time_input(
-                                    "Start Time:",
-                                    value=datetime.now().replace(hour=start_hour, minute=start_min).time(),
-                                    key=f"{confirmation_key}_start_time"
-                                )
-                                
-                                end_time = st.time_input(
-                                    "End Time:",
-                                    value=datetime.now().replace(hour=end_hour, minute=end_min).time(),
-                                    key=f"{confirmation_key}_end_time"
-                                )
-                            
-                            # Location
-                            default_location = meeting_suggestion.get('location', '')
-                            event_location = st.text_input(
-                                "Location:",
-                                value=default_location,
-                                key=f"{confirmation_key}_location"
-                            )
-                            
-                            # Description/Notes
-                            default_notes = meeting_suggestion.get('notes', '')
-                            event_description = st.text_area(
-                                "Description/Notes:",
-                                value=default_notes,
-                                height=100,
-                                key=f"{confirmation_key}_description"
-                            )
-                            
-                            # Participants (read-only for now, extracted from LLM)
-                            participants = meeting_suggestion.get('participants', [])
-                            if participants:
-                                st.write("**👥 Detected Participants:**")
-                                for participant in participants:
-                                    st.write(f"   • {participant}")
-                            
-                            # Store edited details in session state
-                            edited_details = {
-                                'title': event_title,
-                                'date': event_date.strftime('%Y-%m-%d'),
-                                'start_time': start_time.strftime('%H:%M'),
-                                'end_time': end_time.strftime('%H:%M'),
-                                'location': event_location,
-                                'description': event_description,
-                                'participants': participants,
-                                'purpose': meeting_suggestion.get('purpose', ''),
-                                'original_email_subject': email.subject,
-                                'original_email_body': email.body
-                            }
-                            st.session_state[f"{confirmation_key}_edited_details"] = edited_details
-                            
-                        else:
-                            st.warning("⚠️ Could not extract meeting details from email")
-                            
-                    except Exception as e:
-                        st.error(f"❌ Error extracting meeting details: {str(e)}")
-                    
-                    st.write("---")
-                    col1, col2 = st.columns([1.2, 0.8])
-                    with col1:
-                        if st.button("🗓️ Create Calendar Event", key=f"{confirmation_key}_yes", use_container_width=True):
-                            st.session_state[confirmation_key] = True
-                            st.rerun()
-                    with col2:
-                        if st.button("⏭️ Skip", key=f"{confirmation_key}_no", use_container_width=True):
-                            st.session_state[confirmation_key] = False
-                            st.rerun()
-        
-        # Clean up processed confirmations
-        for key in confirmations_to_remove:
-            del st.session_state.pending_calendar_confirmations[key]
-            # Also clean up edited details
-            edited_details_key = f"{key}_edited_details"
-            if edited_details_key in st.session_state:
-                del st.session_state[edited_details_key]
-    
-    def _queue_calendar_event_for_streamlit(self, email: OutlookEmailData, analysis: Dict, meeting_suggestion: Dict):
-        """Queue calendar event for interactive confirmation in Streamlit"""
-        import streamlit as st
-        
-        try:
-            # Initialize pending confirmations if not exists
-            if 'pending_calendar_confirmations' not in st.session_state:
-                st.session_state.pending_calendar_confirmations = {}
-            
-            # Create unique key for this confirmation
-            confirmation_key = f"calendar_event_{email.id}_{hash(email.subject)}"
-            
-            # Store the confirmation data
-            confirmation_data = {
-                'email': email,
-                'analysis': analysis,
-                'meeting_suggestion': meeting_suggestion,
-                'subject': email.subject,
-                'sender': email.sender,
-                'priority_score': analysis.priority_score if hasattr(analysis, 'priority_score') else email.priority_score,
-                'email_type': analysis.email_type if hasattr(analysis, 'email_type') else email.email_type,
-                'body_preview': email.body_preview or email.body[:100]
-            }
-            
-            # Queue for confirmation
-            st.session_state.pending_calendar_confirmations[confirmation_key] = confirmation_data
-            
-        except Exception as e:
-            print(f"   ❌ Error queuing calendar event for confirmation: {e}")
 
 class EmailHistoryExtractor:
     """Extracts relevant email history for context (inspired by inbox-zero)"""
