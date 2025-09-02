@@ -341,7 +341,7 @@ class LLMEmailAnalyzer:
         """Analyze email using LLM for sophisticated understanding"""
         
         analysis_prompt = f"""
-You are an expert email analyst for a busy professional. Analyze this email and provide a detailed assessment.
+You're a smart assistant helping someone manage their email. Look at this email and think about it like a human would.
 
 EMAIL TO ANALYZE:
 From: {email.sender} <{email.sender_email}>
@@ -361,52 +361,73 @@ USER CONTEXT:
 EMAIL THREAD CONTEXT:
 {email_thread_context or "This appears to be a standalone email or start of new thread"}
 
-PRIORITY ANALYSIS CRITERIA:
-1. UNREAD emails get +25 priority points (this is UNREAD: {not email.is_read})
-2. DEADLINE/URGENCY keywords: urgent, asap, critical, deadline, due, expires, today, tomorrow, approaching, timely delivery, submit, delivery (+35 points)
-3. BUSINESS IMPORTANCE: meeting, approval, decision, client, proposal, contract, budget (+20 points)
-4. REQUESTS/QUESTIONS: Contains "?", "please", "can you", "need", "request" (+15 points)
-5. SENDER IMPORTANCE: CEO, Director, Manager, Client, Lead roles (+20 points)
-6. AGE: Older unread emails get higher priority (+15-25 points)
+THINK LIKE A HUMAN:
 
-ANALYSIS REQUIRED:
-1. Priority Score (0-100): Calculate based on above criteria
-2. Urgency Level: critical(85+)/urgent(70+)/normal(50+)/low(<50)
-3. Email Type: meeting/question/request/deadline/appreciation/information/complaint/announcement
-4. Action Required: reply/attend/approve/review/complete/none
-5. Key Points: Main topics/requests in the email (bullet points)
-6. Response Tone: formal/professional/friendly/casual
-7. Deadline Info: Any deadlines mentioned (be specific, extract date/time)
-8. Sender Relationship: manager/client/colleague/vendor/external
-9. Business Context: How this affects work/projects
-10. Confidence: How certain you are of this analysis (0-1)
-11. Task Breakdown: Specific actionable tasks with extracted details (include links, dates, times, contact info, locations, file names)
+Look at this email and ask yourself:
 
-PROFESSIONAL EMAIL PRIORITIZATION:
-- Emails with specific deadlines (dates mentioned) = CRITICAL priority (95+)
-- Unread emails with deadlines = CRITICAL priority (90+)
-- Project delivery/submission requests = CRITICAL priority (85+)
-- Client/manager/CEO requests = CRITICAL priority (85+)
-- Meeting invitations from important people = HIGH priority (75+)
-- Project updates with deadlines = HIGH priority (70+)
-- Questions requiring answers = MEDIUM priority (60+)
-- Internal updates = MEDIUM priority (50+)
-- Newsletters/marketing = LOW priority (20-)
+🤔 WHAT'S REALLY GOING ON HERE?
+- Is someone just letting me know something happened? (like "John accepted your meeting")
+- Is someone asking me to do something?
+- Is there a deadline I need to worry about?
+- Is this just spam or marketing stuff?
+- Does this actually need my attention right now?
 
-SMART CATEGORIZATION:
-- URGENT: Contains deadline words, marked urgent, from VIP sender
-- ACTIONABLE: Contains questions, requests, meeting invites
-- INFORMATIONAL: Updates, announcements, newsletters
-- SOCIAL: Personal emails, congratulations, thank you notes
-- AUTOMATED: System emails, notifications, confirmations
-- MARKETING: Promotional emails, newsletters, marketing campaigns
-- NOREPLY: Automated emails that should not be replied to
+💭 PUT YOURSELF IN THEIR SHOES:
+- If I don't respond to this, will someone be waiting?
+- Will something bad happen if I ignore this?
+- Is this urgent (needs action today/tomorrow) or can it wait?
+- Is this person important to my work?
 
-EMAIL REPLY DECISION:
-- NEVER reply to: marketing emails, no-reply addresses, automated notifications, promotional content
-- ALWAYS reply to: direct questions, meeting requests, project discussions, client communications
-- Email addresses containing: "marketing", "no-reply", "noreply", "automated", "system" = NO REPLY
-- Marketing content indicators: "offer", "promotion", "sign up", "subscribe", "unsubscribe" = NO REPLY
+🎯 WHAT DOES "URGENT" ACTUALLY MEAN?
+- Urgent = This really can't wait, someone needs this soon
+- Not urgent = This is important but can be handled in a few days
+- Low priority = This is just FYI or not very important
+
+Trust your human instincts about what matters and what doesn't.
+
+TELL ME WHAT YOU THINK:
+1. Priority Score (0-100): How important is this really?
+2. Urgency Level: Is this "critical" (drop everything), "urgent" (needs action soon), "normal" (can wait a bit), or "low" (not that important)?
+3. Email Type: What kind of email is this? (meeting stuff, question, request, deadline, just info, etc.)
+4. Action Required: What needs to happen? (reply, attend meeting, approve something, review, do a task, or nothing)
+5. Key Points: What's this email actually about? (in simple terms)
+6. Response Tone: How should someone respond? (formal, professional, friendly, casual)
+7. Deadline Info: Is there a deadline? When exactly?
+8. Sender Relationship: Who is this person to the recipient? (boss, client, coworker, vendor, stranger)
+9. Business Context: Why does this matter for work?
+10. Confidence: How sure are you about this analysis? (0-1, where 1 = very confident)
+11. Task Breakdown: If there are things to do, what are they specifically?
+
+💡 SOME COMMON SENSE HINTS:
+- If there's a tight deadline, it's probably urgent
+- If it's from your boss or an important client, pay attention
+- If someone's asking you a question, they're probably waiting for an answer
+- If it's just "John accepted your meeting invite" - that's just FYI, not urgent
+- If it's marketing or automated stuff, probably not important
+- If someone needs something done today or tomorrow, that's urgent
+
+But use your brain - every email is different!
+
+🏷️ WHAT KIND OF EMAIL IS THIS?
+Just pick what makes sense:
+- MEETING: Meeting invites, acceptances, cancellations, etc.
+- QUESTION: Someone asking you something
+- REQUEST: Someone wants you to do something  
+- DEADLINE: Something with a due date
+- INFORMATION: Just sharing info, updates, announcements
+- AUTOMATED: Computer-generated stuff, notifications
+- MARKETING: Ads, newsletters, promotional stuff
+- SOCIAL: Personal stuff, congratulations, casual chat
+
+💬 SHOULD SOMEONE REPLY TO THIS?
+Think about it:
+- If someone asked a question → probably yes
+- If it's a meeting invite → probably yes  
+- If it's just "John accepted your meeting" → no, just FYI
+- If it's spam or marketing → definitely no
+- If it's automated system stuff → usually no
+
+Use your common sense!
 
 TASK BREAKDOWN REQUIREMENTS:
 For each task, extract and include specific actionable details:
@@ -424,6 +445,12 @@ ENHANCED TASK BREAKDOWN EXAMPLES:
 - For client inquiries: ["Research client requirements for: [specific_topic]", "Prepare detailed response by: [deadline]", "Gather supporting documentation from: [source_locations]", "Schedule call using: [calendar_link] for [proposed_times]"]
 - For portal access: ["Access portal at: [portal_url]", "Login with credentials: [username_format]", "Complete required sections by: [deadline]", "Download forms from: [download_link]"]
 - For deadline submissions: ["Prepare submission materials for: [topic]", "Submit via: [submission_portal/email]", "Deadline: [exact_date_time]", "Required format: [specifications]"]
+
+HERE ARE SOME EXAMPLES:
+- "John has accepted your meeting invitation" → Low priority (25), just info, no action needed, don't reply
+- "Meeting invitation: Project Review" → High priority (75), meeting invite, need to respond
+- Email from "noreply@system.com" → Very low priority (15), automated, ignore it
+- "Can you send me the report by Friday?" → High priority (80), urgent request, needs reply
 
 Respond in this EXACT JSON format:
 {{
@@ -2178,27 +2205,36 @@ Keep it under 200 words and focus on actionable style elements.
                     safe_unread_limit = min(unread_limit, ABSOLUTE_MAX_EMAILS)
                     if safe_unread_limit < unread_limit:
                         print(f"⚠️ SAFETY CAP: Limiting unread processing from {unread_limit} to {safe_unread_limit} emails")
-                    print(f"📬 Processing up to {safe_unread_limit} unread emails...")
+                    print(f"📬 Requesting up to {safe_unread_limit} unread emails from Outlook...")
                     emails = self.outlook.get_recent_emails(max_results=safe_unread_limit, hours_back=72)  # hours_back ignored in unread mode
+                    print(f"📧 Found {len(emails)} unread emails to process")
                 else:
-                    print(f"📬 Processing ALL unread emails (capped at {ABSOLUTE_MAX_EMAILS} for safety)...")
+                    print(f"📬 Requesting ALL unread emails (capped at {ABSOLUTE_MAX_EMAILS} for safety)...")
                     emails = self.outlook.get_recent_emails(max_results=ABSOLUTE_MAX_EMAILS, hours_back=72)  # Safety cap instead of 1000
+                    print(f"📧 Found {len(emails)} unread emails to process")
             else:
                 # First, get recent emails from past 3 days (72 hours) to catch deadline emails
-                print(f"🔍 Scanning past 72 hours for critical emails...")
+                print(f"🔍 Scanning past 72 hours for critical emails (requesting up to {initial_max})...")
                 emails = self.outlook.get_recent_emails(max_results=initial_max, hours_back=72)
+                print(f"📧 Found {len(emails)} emails from past 72 hours")
                 
                 # Also try to get more emails if we're not getting enough (but respect mode limits and safety cap)
                 if len(emails) < 5:  # Reduced threshold for expansion
                     safe_extended_max = min(extended_max, ABSOLUTE_MAX_EMAILS)
                     if safe_extended_max < extended_max:
                         print(f"⚠️ SAFETY CAP: Limiting extended search from {extended_max} to {safe_extended_max} emails")
-                    print(f"📧 Only found {len(emails)} emails, expanding search to past 7 days (max {safe_extended_max})...")
+                    print(f"📧 Only found {len(emails)} emails, expanding search to past 7 days (requesting up to {safe_extended_max})...")
                     emails = self.outlook.get_recent_emails(max_results=safe_extended_max, hours_back=168)  # 7 days
+                    print(f"📧 Found {len(emails)} total emails after expanding search")
             
-            # For now, let's focus on the improved time window which should catch your deadline email
-            # The Graph API search has compatibility issues that need further investigation
-            print(f"📧 Analyzing {len(emails)} emails from extended time window...")
+            # Summary of what we're actually processing
+            if len(emails) == 0:
+                print("❌ No emails found to process")
+                return
+            else:
+                print(f"🎯 PROCESSING: {len(emails)} emails total")
+                print(f"   Mode: {self.get_current_mode()}")
+                print(f"   Safety cap: {ABSOLUTE_MAX_EMAILS} max emails")
             
             # Warn user about large processing times
             if len(emails) > 100:
@@ -2215,8 +2251,6 @@ Keep it under 200 words and focus on actionable style elements.
                 found_keywords = [kw for kw in deadline_keywords if kw in email_text]
                 if found_keywords:
                     print(f"   📌 Found deadline keywords {found_keywords} in: {email.subject[:50]}...")
-            
-            self.emails_analyzed = len(emails)
             
             if not emails:
                 print("📪 No emails found")
@@ -2239,6 +2273,9 @@ Keep it under 200 words and focus on actionable style elements.
             
             # Sort by LLM-determined priority
             analyzed_emails.sort(key=lambda x: x[1]['core_analysis'].priority_score, reverse=True)
+            
+            # Update the counter with actual processed emails
+            self.emails_analyzed = len(analyzed_emails)
             
             # Step 5: Display LLM Analysis Results with professional prioritization
             print(f"\n🎯 PROFESSIONAL EMAIL PRIORITIZATION:")
@@ -2668,11 +2705,35 @@ Keep it under 200 words and focus on actionable style elements.
                 categories[category] = categories.get(category, 0) + 1
             
             print(f"📊 EMAIL ANALYSIS:")
-            print(f"   📧 Total emails analyzed: {self.emails_analyzed}")
+            
+            # Show fetched vs processed if different (due to timeouts or errors)
+            emails_fetched = len(emails)
+            if emails_fetched != self.emails_analyzed:
+                print(f"   📥 Emails fetched from Outlook: {emails_fetched}")
+                print(f"   📧 Emails successfully analyzed: {self.emails_analyzed}")
+                if emails_fetched > self.emails_analyzed:
+                    print(f"   ⚠️ {emails_fetched - self.emails_analyzed} emails skipped due to timeout/errors")
+            else:
+                print(f"   📧 Total emails analyzed: {self.emails_analyzed}")
+            
             print(f"   📬 Unread emails: {unread_count}")
             print(f"   🔴 Critical priority: {critical_count}")
             print(f"   🟡 Urgent priority: {urgent_count}")
             print(f"   ⏰ With deadlines: {deadline_count}")
+            
+            # Show safety cap info if it was applied
+            def get_safety_config(key, default):
+                try:
+                    import streamlit as st
+                    if hasattr(st, 'secrets') and key in st.secrets:
+                        return int(st.secrets[key])
+                except:
+                    pass
+                return default
+                
+            safety_cap = get_safety_config('ABSOLUTE_MAX_EMAILS', 500)
+            if emails_fetched == safety_cap:
+                print(f"   🛡️ Safety cap applied: Limited to {safety_cap} emails")
             
             print(f"\n🛡️ SECURITY ANALYSIS:")
             print(f"   🚨 Security alerts: {security_alerts}")
