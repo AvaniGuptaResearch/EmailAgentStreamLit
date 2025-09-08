@@ -3238,6 +3238,39 @@ Keep it under 200 words and focus on actionable style elements.
         else:
             return "Business operations, Communication"
     
+    def _is_user_cc_recipient(self, email: OutlookEmailData, user_email: str) -> bool:
+        """Check if user is CCed rather than direct recipient"""
+        try:
+            # Check if user is in CC field (this requires the email to have CC info)
+            # For now, we'll use a simple heuristic - if user is not in TO field but received email, likely CCed
+            if hasattr(email, 'to_recipients') and email.to_recipients:
+                to_emails = [recipient.get('emailAddress', {}).get('address', '').lower() for recipient in email.to_recipients]
+                return user_email.lower() not in to_emails
+            
+            # Fallback: analyze the email body for CC indicators
+            body_lower = email.body.lower()
+            cc_indicators = ['cc:', 'copied:', 'fyi', 'for your information', 'keeping you in the loop']
+            return any(indicator in body_lower for indicator in cc_indicators)
+        except:
+            return False
+    
+    def _clean_html_from_text(self, text: str) -> str:
+        """Remove HTML tags and clean up text for display"""
+        import re
+        if not text:
+            return text
+            
+        # Remove HTML comments
+        text = re.sub(r'<!--.*?-->', '', text, flags=re.DOTALL)
+        
+        # Remove HTML tags
+        text = re.sub(r'<[^>]+>', '', text)
+        
+        # Clean up excessive whitespace
+        text = re.sub(r'\s+', ' ', text).strip()
+        
+        return text
+    
     def _should_create_calendar_event(self, email: OutlookEmailData, analysis: LLMAnalysisResult) -> bool:
         """Determine if a calendar event should be created for this email"""
         # Check if calendar invites are enabled via environment variable
@@ -3373,7 +3406,7 @@ Keep it under 200 words and focus on actionable style elements.
             'sender_email': email.sender_email,
             'priority_score': analysis.priority_score,
             'email_type': analysis.email_type,
-            'body_preview': email.body[:200] + "..." if len(email.body) > 200 else email.body
+            'body_preview': self._clean_html_from_text(email.body[:200] + "..." if len(email.body) > 200 else email.body)
         }
         
         # Return None to indicate we need confirmation later (don't block main processing)
@@ -4446,7 +4479,7 @@ EXAMPLES:
                     'email_type': getattr(core_analysis, 'email_type', 'Unknown'),
                     'action_required': getattr(core_analysis, 'action_required', 'Review'),
                     'received_time': email.received_datetime.strftime('%Y-%m-%d %H:%M') if hasattr(email, 'received_datetime') and email.received_datetime else 'Unknown',
-                    'body_preview': email.body[:100] + '...' if len(email.body) > 100 else email.body,
+                    'body_preview': self._clean_html_from_text(email.body[:100] + '...' if len(email.body) > 100 else email.body),
                     'is_read': getattr(email, 'is_read', True),
                     'has_attachments': getattr(email, 'has_attachments', False)
                 }
@@ -4668,7 +4701,7 @@ EXAMPLES:
                 'sender': email.sender,
                 'priority_score': analysis.priority_score if hasattr(analysis, 'priority_score') else email.priority_score,
                 'email_type': analysis.email_type if hasattr(analysis, 'email_type') else email.email_type,
-                'body_preview': email.body_preview or email.body[:100]
+                'body_preview': self._clean_html_from_text(email.body_preview or email.body[:100])
             }
             
             # Queue for confirmation
