@@ -2628,9 +2628,9 @@ Keep it under 200 words and focus on actionable style elements.
                     if hasattr(category, 'subcategory') and category.subcategory and category.subcategory not in ['general', 'specific project name', '']:
                         print(f"      📂 Subcategory: {category.subcategory}")
                     
-                    # Add email preview with metadata
+                    # Show full email content with metadata
                     if email.body:
-                        preview = self._clean_html_from_text(email.body[:150])
+                        full_content = self._clean_html_from_text(email.body)
                         date_str = email.date.strftime('%Y-%m-%d %H:%M') if hasattr(email, 'date') and email.date else 'No date'
                         
                         # Add metadata indicators
@@ -2643,7 +2643,8 @@ Keep it under 200 words and focus on actionable style elements.
                         metadata_str = " ".join(metadata)
                         metadata_display = f" {metadata_str}" if metadata_str else ""
                         
-                        print(f"      📄 Preview ({date_str}){metadata_display}: {preview}...")
+                        print(f"      📧 Full Email ({date_str}){metadata_display}:")
+                        print(f"      {full_content}")
                     
                     # Security Analysis
                     if security and security.is_suspicious:
@@ -2658,6 +2659,16 @@ Keep it under 200 words and focus on actionable style elements.
                         print(f"      📋 Tasks:")
                         for task in analysis.task_breakdown:
                             print(f"         • {task}")
+                    
+                    # Show draft reply if available
+                    draft_info = self._get_draft_for_email(email)
+                    if draft_info:
+                        print(f"      ✉️ Generated Draft Reply:")
+                        print(f"         📧 Subject: {draft_info['subject']}")
+                        print(f"         🎯 Tone: {draft_info['tone']}")
+                        print(f"         📝 Content:")
+                        print(f"         {draft_info['body']}")
+                        print(f"         🎪 Confidence: {draft_info['confidence']:.2f}")
                         
                         # Add calendar event as a task if meeting detected
                         if self._should_create_calendar_event(email, analysis):
@@ -2717,9 +2728,9 @@ Keep it under 200 words and focus on actionable style elements.
                     if smart_category and smart_category.subcategory and smart_category.subcategory != 'general':
                         print(f"      📂 Project: {smart_category.subcategory}")
                     
-                    # Add email preview with metadata
+                    # Show full email content with metadata
                     if email.body:
-                        preview = self._clean_html_from_text(email.body[:150])
+                        full_content = self._clean_html_from_text(email.body)
                         date_str = email.date.strftime('%Y-%m-%d %H:%M') if hasattr(email, 'date') and email.date else 'No date'
                         
                         # Add metadata indicators
@@ -2732,7 +2743,8 @@ Keep it under 200 words and focus on actionable style elements.
                         metadata_str = " ".join(metadata)
                         metadata_display = f" {metadata_str}" if metadata_str else ""
                         
-                        print(f"      📄 Preview ({date_str}){metadata_display}: {preview}...")
+                        print(f"      📧 Full Email ({date_str}){metadata_display}:")
+                        print(f"      {full_content}")
                     
                     # Cold Email Detection Results
                     if cold_analysis and cold_analysis.is_cold_email:
@@ -2753,6 +2765,16 @@ Keep it under 200 words and focus on actionable style elements.
                         print(f"      📋 Tasks:")
                         for task in analysis.task_breakdown:
                             print(f"         • {task}")
+                    
+                    # Show draft reply if available
+                    draft_info = self._get_draft_for_email(email)
+                    if draft_info:
+                        print(f"      ✉️ Generated Draft Reply:")
+                        print(f"         📧 Subject: {draft_info['subject']}")
+                        print(f"         🎯 Tone: {draft_info['tone']}")
+                        print(f"         📝 Content:")
+                        print(f"         {draft_info['body']}")
+                        print(f"         🎪 Confidence: {draft_info['confidence']:.2f}")
                         
                         # Add calendar event as a task if meeting detected
                         if self._should_create_calendar_event(email, analysis):
@@ -2805,9 +2827,9 @@ Keep it under 200 words and focus on actionable style elements.
                     if hasattr(category, 'subcategory') and category.subcategory:
                         print(f"      📂 Project: {category.subcategory}")
                     
-                    # Add email preview with metadata
+                    # Show full email content with metadata
                     if email.body:
-                        preview = self._clean_html_from_text(email.body[:150])
+                        full_content = self._clean_html_from_text(email.body)
                         date_str = email.date.strftime('%Y-%m-%d %H:%M') if hasattr(email, 'date') and email.date else 'No date'
                         
                         # Add metadata indicators
@@ -2820,7 +2842,8 @@ Keep it under 200 words and focus on actionable style elements.
                         metadata_str = " ".join(metadata)
                         metadata_display = f" {metadata_str}" if metadata_str else ""
                         
-                        print(f"      📄 Preview ({date_str}){metadata_display}: {preview}...")
+                        print(f"      📧 Full Email ({date_str}){metadata_display}:")
+                        print(f"      {full_content}")
                     
                     # Security warnings for normal priority emails too
                     if (security and hasattr(security, 'is_suspicious') and security.is_suspicious and 
@@ -2831,6 +2854,16 @@ Keep it under 200 words and focus on actionable style elements.
                         print(f"      📋 Tasks:")
                         for task in analysis.task_breakdown:
                             print(f"         • {task}")
+                    
+                    # Show draft reply if available
+                    draft_info = self._get_draft_for_email(email)
+                    if draft_info:
+                        print(f"      ✉️ Generated Draft Reply:")
+                        print(f"         📧 Subject: {draft_info['subject']}")
+                        print(f"         🎯 Tone: {draft_info['tone']}")
+                        print(f"         📝 Content:")
+                        print(f"         {draft_info['body']}")
+                        print(f"         🎪 Confidence: {draft_info['confidence']:.2f}")
                         
                         # Add calendar event as a task if meeting detected
                         if self._should_create_calendar_event(email, analysis):
@@ -2874,9 +2907,9 @@ Keep it under 200 words and focus on actionable style elements.
                     
                     print(f"   {i+1}. {email.subject[:40]}... (Score: {analysis.priority_score:.1f}){security_warning}")
                     
-                    # Add email preview for low priority too
+                    # Show email content for low priority (limited length)
                     if email.body:
-                        preview = self._clean_html_from_text(email.body[:100])  # Shorter preview for low priority
+                        content = self._clean_html_from_text(email.body[:300])  # Limited content for low priority
                         date_str = email.date.strftime('%Y-%m-%d %H:%M') if hasattr(email, 'date') and email.date else 'No date'
                         
                         # Add metadata indicators for low priority
@@ -2889,7 +2922,8 @@ Keep it under 200 words and focus on actionable style elements.
                         metadata_str = " ".join(metadata)
                         metadata_display = f" {metadata_str}" if metadata_str else ""
                         
-                        print(f"      📄 Preview ({date_str}){metadata_display}: {preview}...")
+                        print(f"      📧 Email Content ({date_str}){metadata_display}:")
+                        print(f"      {content}{'...' if len(email.body) > 300 else ''}")
                 if len(low_emails) > 3:
                     print(f"   ... and {len(low_emails) - 3} more low priority emails")
                 print()
@@ -3338,6 +3372,22 @@ Keep it under 200 words and focus on actionable style elements.
         text = re.sub(r'\s+', ' ', text).strip()
         
         return text
+    
+    def _get_draft_for_email(self, email: OutlookEmailData) -> dict:
+        """Get draft reply information for an email from session state"""
+        import streamlit as st
+        
+        try:
+            # Generate email key (same format used when storing drafts)
+            email_key = f"{email.id}_{email.sender_email}"
+            
+            # Check if we have session state and drafts
+            if hasattr(st, 'session_state') and hasattr(st.session_state, 'email_drafts'):
+                return st.session_state.email_drafts.get(email_key)
+            
+            return None
+        except:
+            return None
     
     def _should_create_calendar_event(self, email: OutlookEmailData, analysis: LLMAnalysisResult) -> bool:
         """Determine if a calendar event should be created for this email"""
