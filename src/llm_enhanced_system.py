@@ -4366,6 +4366,8 @@ EXAMPLES:
             # Group by priority levels
             critical_emails = [(e, a) for e, a in sorted_emails if a['core_analysis'].priority_score >= 85]
             urgent_emails = [(e, a) for e, a in sorted_emails if 70 <= a['core_analysis'].priority_score < 85]
+            normal_emails = [(e, a) for e, a in sorted_emails if 50 <= a['core_analysis'].priority_score < 70]
+            low_emails = [(e, a) for e, a in sorted_emails if a['core_analysis'].priority_score < 50]
             
             # Add critical emails
             if critical_emails:
@@ -4415,12 +4417,36 @@ EXAMPLES:
                             body_parts.append(f"      • ... and {len(core.task_breakdown) - 3} more tasks")
                     body_parts.append("")
             
+            # Add normal priority emails  
+            if normal_emails:
+                body_parts.append("🟢 NORMAL PRIORITY (50-69 Score)")
+                body_parts.append("-" * 30)
+                for i, (email, analysis) in enumerate(normal_emails[:8], 1):  # Limit to 8 normal emails
+                    core = analysis['core_analysis']
+                    body_parts.append(f"{i}. {email.subject} - Score: {core.priority_score:.1f}")
+                    body_parts.append(f"   From: {email.sender}")
+                    body_parts.append(f"   Date: {email.date.strftime('%Y-%m-%d %H:%M')}")
+                    body_parts.append(f"   Action Required: {core.action_required}")
+                    body_parts.append("")
+            
+            # Add low priority emails (summary only)
+            if low_emails:
+                body_parts.append("⚪ LOW PRIORITY (<50 Score)")
+                body_parts.append("-" * 30)
+                # Just list subjects for low priority, no details
+                for i, (email, analysis) in enumerate(low_emails[:5], 1):
+                    core = analysis['core_analysis']
+                    body_parts.append(f"{i}. {email.subject} (Score: {core.priority_score:.1f})")
+                body_parts.append("")
+            
             # Add summary statistics
             body_parts.append("")
             body_parts.append("📊 SUMMARY")
             body_parts.append(f"Total emails analyzed: {len(analyzed_emails)}")
             body_parts.append(f"Critical priority: {len(critical_emails)}")
             body_parts.append(f"Urgent priority: {len(urgent_emails)}")
+            body_parts.append(f"Normal priority: {len(normal_emails)}")
+            body_parts.append(f"Low priority: {len(low_emails)}")
             body_parts.append("")
             body_parts.append("📋 TASK BREAKDOWN INCLUDED")
             body_parts.append("Each high-priority email includes specific action items and tasks")
