@@ -2628,6 +2628,23 @@ Keep it under 200 words and focus on actionable style elements.
                     if hasattr(category, 'subcategory') and category.subcategory and category.subcategory not in ['general', 'specific project name', '']:
                         print(f"      📂 Subcategory: {category.subcategory}")
                     
+                    # Add email preview with metadata
+                    if email.body:
+                        preview = self._clean_html_from_text(email.body[:150])
+                        date_str = email.date.strftime('%Y-%m-%d %H:%M') if hasattr(email, 'date') and email.date else 'No date'
+                        
+                        # Add metadata indicators
+                        metadata = []
+                        if hasattr(email, 'has_attachments') and email.has_attachments:
+                            metadata.append("📎")
+                        if hasattr(email, 'importance') and email.importance and email.importance.lower() == 'high':
+                            metadata.append("❗")
+                        
+                        metadata_str = " ".join(metadata)
+                        metadata_display = f" {metadata_str}" if metadata_str else ""
+                        
+                        print(f"      📄 Preview ({date_str}){metadata_display}: {preview}...")
+                    
                     # Security Analysis
                     if security and security.is_suspicious:
                         print(f"      🚨 SECURITY: {getattr(security, 'risk_level', 'UNKNOWN').upper()} RISK")
@@ -2700,6 +2717,23 @@ Keep it under 200 words and focus on actionable style elements.
                     if smart_category and smart_category.subcategory and smart_category.subcategory != 'general':
                         print(f"      📂 Project: {smart_category.subcategory}")
                     
+                    # Add email preview with metadata
+                    if email.body:
+                        preview = self._clean_html_from_text(email.body[:150])
+                        date_str = email.date.strftime('%Y-%m-%d %H:%M') if hasattr(email, 'date') and email.date else 'No date'
+                        
+                        # Add metadata indicators
+                        metadata = []
+                        if hasattr(email, 'has_attachments') and email.has_attachments:
+                            metadata.append("📎")
+                        if hasattr(email, 'importance') and email.importance and email.importance.lower() == 'high':
+                            metadata.append("❗")
+                        
+                        metadata_str = " ".join(metadata)
+                        metadata_display = f" {metadata_str}" if metadata_str else ""
+                        
+                        print(f"      📄 Preview ({date_str}){metadata_display}: {preview}...")
+                    
                     # Cold Email Detection Results
                     if cold_analysis and cold_analysis.is_cold_email:
                         print(f"      ❄️ Cold Email: {cold_analysis.confidence:.1f} confidence - {cold_analysis.recommended_action}")
@@ -2771,6 +2805,23 @@ Keep it under 200 words and focus on actionable style elements.
                     if hasattr(category, 'subcategory') and category.subcategory:
                         print(f"      📂 Project: {category.subcategory}")
                     
+                    # Add email preview with metadata
+                    if email.body:
+                        preview = self._clean_html_from_text(email.body[:150])
+                        date_str = email.date.strftime('%Y-%m-%d %H:%M') if hasattr(email, 'date') and email.date else 'No date'
+                        
+                        # Add metadata indicators
+                        metadata = []
+                        if hasattr(email, 'has_attachments') and email.has_attachments:
+                            metadata.append("📎")
+                        if hasattr(email, 'importance') and email.importance and email.importance.lower() == 'high':
+                            metadata.append("❗")
+                        
+                        metadata_str = " ".join(metadata)
+                        metadata_display = f" {metadata_str}" if metadata_str else ""
+                        
+                        print(f"      📄 Preview ({date_str}){metadata_display}: {preview}...")
+                    
                     # Security warnings for normal priority emails too
                     if (security and hasattr(security, 'is_suspicious') and security.is_suspicious and 
                         hasattr(security, 'risk_level') and security.risk_level in ["medium", "high", "critical"]):
@@ -2822,6 +2873,23 @@ Keep it under 200 words and focus on actionable style elements.
                         security_warning = f" 🚨 {getattr(security, 'risk_level', 'unknown')} risk"
                     
                     print(f"   {i+1}. {email.subject[:40]}... (Score: {analysis.priority_score:.1f}){security_warning}")
+                    
+                    # Add email preview for low priority too
+                    if email.body:
+                        preview = self._clean_html_from_text(email.body[:100])  # Shorter preview for low priority
+                        date_str = email.date.strftime('%Y-%m-%d %H:%M') if hasattr(email, 'date') and email.date else 'No date'
+                        
+                        # Add metadata indicators for low priority
+                        metadata = []
+                        if hasattr(email, 'has_attachments') and email.has_attachments:
+                            metadata.append("📎")
+                        if hasattr(email, 'importance') and email.importance and email.importance.lower() == 'high':
+                            metadata.append("❗")
+                        
+                        metadata_str = " ".join(metadata)
+                        metadata_display = f" {metadata_str}" if metadata_str else ""
+                        
+                        print(f"      📄 Preview ({date_str}){metadata_display}: {preview}...")
                 if len(low_emails) > 3:
                     print(f"   ... and {len(low_emails) - 3} more low priority emails")
                 print()
