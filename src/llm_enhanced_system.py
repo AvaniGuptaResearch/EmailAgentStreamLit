@@ -3199,6 +3199,45 @@ Keep it under 200 words and focus on actionable style elements.
         
         return "; ".join(thread_indicators) if thread_indicators else "Standalone email without clear thread context"
     
+    def _get_user_context(self, user_email: str) -> str:
+        """Get user context/role based on email domain and patterns"""
+        if not user_email:
+            return "Professional"
+        
+        # Extract domain for context
+        domain = user_email.split('@')[-1].lower() if '@' in user_email else ''
+        
+        # Academic/University contexts
+        if any(domain.endswith(suffix) for suffix in ['.edu', '.ac.uk', '.edu.au']):
+            return "Academic researcher/student"
+        elif 'mbzuai' in domain:
+            return "AI researcher at MBZUAI"
+        elif 'university' in domain or 'college' in domain:
+            return "Academic professional"
+        
+        # Corporate contexts
+        elif any(suffix in domain for suffix in ['tech', 'ai', 'ml', 'data']):
+            return "Technology professional"
+        elif domain in ['gmail.com', 'hotmail.com', 'yahoo.com', 'outlook.com']:
+            return "Professional"
+        else:
+            return f"Professional at {domain.replace('.com', '').title()}"
+    
+    def _get_user_expertise(self, user_email: str) -> str:
+        """Get user expertise areas based on email patterns and context"""
+        if not user_email:
+            return "General business"
+        
+        domain = user_email.split('@')[-1].lower() if '@' in user_email else ''
+        
+        # AI/ML/Tech expertise
+        if 'mbzuai' in domain or any(term in domain for term in ['ai', 'ml', 'data', 'tech']):
+            return "Artificial Intelligence, Machine Learning, Research"
+        elif any(domain.endswith(suffix) for suffix in ['.edu', '.ac.uk']):
+            return "Academic research, Teaching"
+        else:
+            return "Business operations, Communication"
+    
     def _should_create_calendar_event(self, email: OutlookEmailData, analysis: LLMAnalysisResult) -> bool:
         """Determine if a calendar event should be created for this email"""
         # Check if calendar invites are enabled via environment variable
