@@ -340,16 +340,16 @@ class UnifiedLLMService:
             return "Error: Invalid JSON response from LLM"
     
     def _generate_openai_response(self, prompt: str, max_tokens: int, temperature: float) -> str:
-        """Generate response using OpenAI"""
+        """Generate response using OpenAI (temperature parameter ignored for compatibility)"""
         from openai import OpenAI
         
         client = OpenAI(api_key=self.api_key)
         
+        # Note: temperature parameter ignored as some OpenAI models don't support custom values
         response = client.chat.completions.create(
             model=self.model,
             messages=[{"role": "user", "content": prompt}],
-            max_completion_tokens=max_tokens,
-            temperature=temperature
+            max_completion_tokens=max_tokens
         )
         
         return response.choices[0].message.content.strip()
@@ -1484,6 +1484,8 @@ class LLMResponseDrafter:
         is_cc_recipient = self._is_user_cc_recipient(email, user_email)
         direct_recipients = self._get_direct_recipients(email)
         
+        # Format newlines to avoid backslash in f-string
+        newlines = "\\n\\n"
         draft_prompt = f"""
 🏆 MASTER EMAIL RESPONSE ARCHITECT
 
@@ -1500,14 +1502,14 @@ You're helping {user_name} ({user_email}) create the perfect response strategy f
 EMAIL DETAILS:
 From: {email.sender} <{email.sender_email}>
 To: {', '.join(direct_recipients) if direct_recipients else 'Multiple recipients'}
-CC: {'Yes (you are CC\'ed)' if is_cc_recipient else 'No'}
+CC: {"Yes (you are CCed)" if is_cc_recipient else "No"}
 Subject: {email.subject}
 Content: {email.body[:800]}
 
 IMPORTANT CONTEXT ABOUT {user_name}:
 - Your role/position: {self._get_user_context(user_email)}
 - Your expertise areas: {self._get_user_expertise(user_email)}
-- Are you CC'ed?: {'YES - you are CC\'ed, not the main recipient' if is_cc_recipient else 'NO - you are a direct recipient'}
+- Are you CCed?: {"YES - you are CCed, not the main recipient" if is_cc_recipient else "NO - you are a direct recipient"}
 - Email analysis: {analysis.email_type}, Action needed: {analysis.action_required}
 - Key points from email: {', '.join(analysis.key_points)}
 - Sender relationship to you: {analysis.sender_relationship}
@@ -1515,7 +1517,7 @@ IMPORTANT CONTEXT ABOUT {user_name}:
 
 SMART RESPONSE LOGIC:
 🚫 DON'T REPLY IF:
-- You're only CC'ed (unless specifically asked to respond)
+- You are only CCed (unless specifically asked to respond)
 - It's just a meeting acceptance/decline notification
 - It's automated/marketing content
 - Someone else is clearly handling it
@@ -1528,7 +1530,7 @@ SMART RESPONSE LOGIC:
 - It's your responsibility or area of expertise
 
 CURRENT SITUATION ANALYSIS:
-{'You are CC\'ed on this email. Unless you are specifically mentioned by name or this directly relates to your expertise/responsibilities, you should not respond.' if is_cc_recipient else f'You are a direct recipient. As {self._get_user_context(user_email)}, consider if this request/question is something you should personally handle.'}
+{"You are CCed on this email. Unless you are specifically mentioned by name or this directly relates to your expertise/responsibilities, you should not respond." if is_cc_recipient else f"You are a direct recipient. As {self._get_user_context(user_email)}, consider if this request/question is something you should personally handle."}
 
 If you determine a response IS needed, write a helpful, specific reply addressing the actual content.
 - Deadline: {analysis.deadline_info or 'None mentioned'}
@@ -1614,9 +1616,7 @@ First name: {email.sender.split()[0] if email.sender else 'there'}
 {{
     "should_respond": true,
     "subject": "Re: [original subject]", 
-    "body": "Hi {email.sender.split()[0] if email.sender else 'there'},\
-\
-[Your specific, helpful response addressing their actual request/question]",
+    "body": "Hi {email.sender.split()[0] if email.sender else 'there'},{newlines}[Your specific, helpful response addressing their actual request/question]",
     "tone": "professional",
     "confidence": 0.9,
     "reasoning": "Explain why this response is appropriate and helpful",
