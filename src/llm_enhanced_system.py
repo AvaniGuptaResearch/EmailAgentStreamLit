@@ -2628,7 +2628,7 @@ Keep it under 200 words and focus on actionable style elements.
                     if hasattr(category, 'subcategory') and category.subcategory and category.subcategory not in ['general', 'specific project name', '']:
                         print(f"      📂 Subcategory: {category.subcategory}")
                     
-                    # Show full email content with metadata
+                    # Show full email with proper formatting
                     if email.body:
                         full_content = self._clean_html_from_text(email.body)
                         date_str = email.date.strftime('%Y-%m-%d %H:%M') if hasattr(email, 'date') and email.date else 'No date'
@@ -2643,8 +2643,15 @@ Keep it under 200 words and focus on actionable style elements.
                         metadata_str = " ".join(metadata)
                         metadata_display = f" {metadata_str}" if metadata_str else ""
                         
-                        print(f"      📧 Full Email ({date_str}){metadata_display}:")
-                        print(f"      {full_content}")
+                        print(f"      ┌─ 📧 EMAIL CONTENT{metadata_display}")
+                        print(f"      │ From: {email.sender} <{email.sender_email}>")
+                        print(f"      │ Date: {date_str}")
+                        print(f"      │ Subject: {email.subject}")
+                        print(f"      │")
+                        # Format email content with proper indentation
+                        for line in full_content.split('\n'):
+                            print(f"      │ {line.strip()}")
+                        print(f"      └─────────────────────────────────────────────")
                     
                     # Security Analysis
                     if security and security.is_suspicious:
@@ -2663,12 +2670,17 @@ Keep it under 200 words and focus on actionable style elements.
                     # Show draft reply if available
                     draft_info = self._get_draft_for_email(email)
                     if draft_info:
-                        print(f"      ✉️ Generated Draft Reply:")
-                        print(f"         📧 Subject: {draft_info['subject']}")
-                        print(f"         🎯 Tone: {draft_info['tone']}")
-                        print(f"         📝 Content:")
-                        print(f"         {draft_info['body']}")
-                        print(f"         🎪 Confidence: {draft_info['confidence']:.2f}")
+                        print(f"      ┌─ ✉️ DRAFT REPLY (Confidence: {draft_info['confidence']:.0%})")
+                        print(f"      │ Subject: {draft_info['subject']}")
+                        print(f"      │ Tone: {draft_info['tone']}")
+                        print(f"      │")
+                        # Format draft content with proper indentation
+                        for line in draft_info['body'].split('\n'):
+                            if line.strip():
+                                print(f"      │ {line.strip()}")
+                            else:
+                                print(f"      │")
+                        print(f"      └─────────────────────────────────────────────")
                         
                         # Add calendar event as a task if meeting detected
                         if self._should_create_calendar_event(email, analysis):
@@ -2728,7 +2740,7 @@ Keep it under 200 words and focus on actionable style elements.
                     if smart_category and smart_category.subcategory and smart_category.subcategory != 'general':
                         print(f"      📂 Project: {smart_category.subcategory}")
                     
-                    # Show full email content with metadata
+                    # Show full email with proper formatting
                     if email.body:
                         full_content = self._clean_html_from_text(email.body)
                         date_str = email.date.strftime('%Y-%m-%d %H:%M') if hasattr(email, 'date') and email.date else 'No date'
@@ -2743,8 +2755,15 @@ Keep it under 200 words and focus on actionable style elements.
                         metadata_str = " ".join(metadata)
                         metadata_display = f" {metadata_str}" if metadata_str else ""
                         
-                        print(f"      📧 Full Email ({date_str}){metadata_display}:")
-                        print(f"      {full_content}")
+                        print(f"      ┌─ 📧 EMAIL CONTENT{metadata_display}")
+                        print(f"      │ From: {email.sender} <{email.sender_email}>")
+                        print(f"      │ Date: {date_str}")
+                        print(f"      │ Subject: {email.subject}")
+                        print(f"      │")
+                        # Format email content with proper indentation
+                        for line in full_content.split('\n'):
+                            print(f"      │ {line.strip()}")
+                        print(f"      └─────────────────────────────────────────────")
                     
                     # Cold Email Detection Results
                     if cold_analysis and cold_analysis.is_cold_email:
@@ -2769,12 +2788,17 @@ Keep it under 200 words and focus on actionable style elements.
                     # Show draft reply if available
                     draft_info = self._get_draft_for_email(email)
                     if draft_info:
-                        print(f"      ✉️ Generated Draft Reply:")
-                        print(f"         📧 Subject: {draft_info['subject']}")
-                        print(f"         🎯 Tone: {draft_info['tone']}")
-                        print(f"         📝 Content:")
-                        print(f"         {draft_info['body']}")
-                        print(f"         🎪 Confidence: {draft_info['confidence']:.2f}")
+                        print(f"      ┌─ ✉️ DRAFT REPLY (Confidence: {draft_info['confidence']:.0%})")
+                        print(f"      │ Subject: {draft_info['subject']}")
+                        print(f"      │ Tone: {draft_info['tone']}")
+                        print(f"      │")
+                        # Format draft content with proper indentation
+                        for line in draft_info['body'].split('\n'):
+                            if line.strip():
+                                print(f"      │ {line.strip()}")
+                            else:
+                                print(f"      │")
+                        print(f"      └─────────────────────────────────────────────")
                         
                         # Add calendar event as a task if meeting detected
                         if self._should_create_calendar_event(email, analysis):
@@ -2827,7 +2851,7 @@ Keep it under 200 words and focus on actionable style elements.
                     if hasattr(category, 'subcategory') and category.subcategory:
                         print(f"      📂 Project: {category.subcategory}")
                     
-                    # Show full email content with metadata
+                    # Show full email with proper formatting
                     if email.body:
                         full_content = self._clean_html_from_text(email.body)
                         date_str = email.date.strftime('%Y-%m-%d %H:%M') if hasattr(email, 'date') and email.date else 'No date'
@@ -2842,8 +2866,15 @@ Keep it under 200 words and focus on actionable style elements.
                         metadata_str = " ".join(metadata)
                         metadata_display = f" {metadata_str}" if metadata_str else ""
                         
-                        print(f"      📧 Full Email ({date_str}){metadata_display}:")
-                        print(f"      {full_content}")
+                        print(f"      ┌─ 📧 EMAIL CONTENT{metadata_display}")
+                        print(f"      │ From: {email.sender} <{email.sender_email}>")
+                        print(f"      │ Date: {date_str}")
+                        print(f"      │ Subject: {email.subject}")
+                        print(f"      │")
+                        # Format email content with proper indentation
+                        for line in full_content.split('\n'):
+                            print(f"      │ {line.strip()}")
+                        print(f"      └─────────────────────────────────────────────")
                     
                     # Security warnings for normal priority emails too
                     if (security and hasattr(security, 'is_suspicious') and security.is_suspicious and 
@@ -2858,12 +2889,17 @@ Keep it under 200 words and focus on actionable style elements.
                     # Show draft reply if available
                     draft_info = self._get_draft_for_email(email)
                     if draft_info:
-                        print(f"      ✉️ Generated Draft Reply:")
-                        print(f"         📧 Subject: {draft_info['subject']}")
-                        print(f"         🎯 Tone: {draft_info['tone']}")
-                        print(f"         📝 Content:")
-                        print(f"         {draft_info['body']}")
-                        print(f"         🎪 Confidence: {draft_info['confidence']:.2f}")
+                        print(f"      ┌─ ✉️ DRAFT REPLY (Confidence: {draft_info['confidence']:.0%})")
+                        print(f"      │ Subject: {draft_info['subject']}")
+                        print(f"      │ Tone: {draft_info['tone']}")
+                        print(f"      │")
+                        # Format draft content with proper indentation
+                        for line in draft_info['body'].split('\n'):
+                            if line.strip():
+                                print(f"      │ {line.strip()}")
+                            else:
+                                print(f"      │")
+                        print(f"      └─────────────────────────────────────────────")
                         
                         # Add calendar event as a task if meeting detected
                         if self._should_create_calendar_event(email, analysis):
@@ -2922,8 +2958,17 @@ Keep it under 200 words and focus on actionable style elements.
                         metadata_str = " ".join(metadata)
                         metadata_display = f" {metadata_str}" if metadata_str else ""
                         
-                        print(f"      📧 Email Content ({date_str}){metadata_display}:")
-                        print(f"      {content}{'...' if len(email.body) > 300 else ''}")
+                        print(f"      ┌─ 📧 EMAIL PREVIEW{metadata_display}")
+                        print(f"      │ From: {email.sender}")
+                        print(f"      │ Date: {date_str}")
+                        print(f"      │")
+                        # Format content with proper indentation
+                        for line in content.split('\n'):
+                            if line.strip():
+                                print(f"      │ {line.strip()}")
+                        if len(email.body) > 300:
+                            print(f"      │ [Content truncated...]")
+                        print(f"      └─────────────────────────────────────────────")
                 if len(low_emails) > 3:
                     print(f"   ... and {len(low_emails) - 3} more low priority emails")
                 print()
