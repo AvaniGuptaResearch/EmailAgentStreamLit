@@ -349,7 +349,18 @@ def main():
     
     # Output section (no duplicate display)
     if not st.session_state.output:
-        st.info("💡 Click 'Process Emails' to start email analysis")
+        st.info("💡 Click 'Process Emails' to start AI-powered email intelligence analysis")
+    
+    # Footer
+    st.markdown("---")
+    st.markdown("""
+    <div style='text-align: center; color: gray; font-size: 0.8em;'>
+    🧠 Powered by State-of-the-Art AI Email Intelligence | 
+    🎯 Business Impact Analysis | 
+    🤖 Advanced Pattern Recognition | 
+    ⚡ Real-time Priority Scoring
+    </div>
+    """, unsafe_allow_html=True)
 
 if __name__ == "__main__":
     main()

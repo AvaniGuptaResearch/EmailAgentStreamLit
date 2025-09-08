@@ -18,20 +18,57 @@ from dotenv import load_dotenv
 load_dotenv()
 
 @dataclass
-class LLMAnalysisResult:
-    """Result from LLM email analysis"""
+class AdvancedAnalysisResult:
+    """SOTA email analysis with advanced intelligence"""
+    # Core Analysis
     priority_score: float
-    urgency_level: str
+    urgency_level: str  # critical, urgent, normal, low
+    confidence: float
+    
+    # Advanced Intent Classification
+    primary_intent: str  # action_request, information_sharing, meeting_coordination, etc.
+    secondary_intents: List[str]  # Multiple intents in complex emails
+    intent_confidence: Dict[str, float]  # Confidence for each intent
+    
+    # Relationship & Sentiment Intelligence
+    sender_relationship: str  # boss, direct_report, peer, client, vendor, unknown
+    relationship_strength: float  # 0-1 scale
+    sentiment_analysis: Dict[str, float]  # positive, negative, neutral, urgent, frustrated
+    communication_style: str  # formal, casual, assertive, collaborative
+    
+    # Business Impact Assessment
+    business_impact: str  # critical, high, medium, low
+    impact_factors: List[str]  # revenue, compliance, deadlines, stakeholder_relations
+    risk_assessment: Dict[str, float]  # legal, reputation, financial, operational
+    
+    # Smart Task Generation (Outcome-Focused)
+    outcome_objectives: List[str]  # What needs to be achieved
+    action_items: List[Dict[str, Any]]  # Structured action items with metadata
+    dependencies: List[str]  # What else needs to happen first
+    delegation_suggestions: List[str]  # Who else should be involved
+    
+    # Advanced Context Understanding
+    email_context: str  # thread_continuation, new_topic, follow_up, etc.
+    missing_context: List[str]  # What information seems to be missing
+    assumptions_made: List[str]  # What the sender assumes you know
+    cultural_considerations: List[str]  # Communication style nuances
+    
+    # Smart Response Intelligence
+    should_reply: bool
+    response_urgency: str  # immediate, same_day, within_24h, when_convenient
+    response_complexity: str  # simple_ack, detailed_response, requires_research
+    suggested_response_tone: str
+    
+    # Legacy compatibility fields
     email_type: str
     action_required: str
-    should_reply: bool
     key_points: List[str]
-    suggested_response_tone: str
     deadline_info: Optional[str]
-    sender_relationship: str
     business_context: str
-    confidence: float
-    task_breakdown: List[str]  # New: Specific tasks to complete
+    task_breakdown: List[str]
+
+# Legacy alias for backward compatibility
+LLMAnalysisResult = AdvancedAnalysisResult
 
 @dataclass
 class LLMDraftResult:
@@ -233,7 +270,7 @@ class UnifiedLLMService:
             response = client.chat.completions.create(
                 model=self.model,
                 messages=[{"role": "user", "content": "test"}],
-                max_tokens=1
+                max_completion_tokens=1
             )
             self.logger.info(f"✅ Connected to OpenAI - Model '{self.model}' available")
         except Exception as e:
@@ -311,7 +348,7 @@ class UnifiedLLMService:
         response = client.chat.completions.create(
             model=self.model,
             messages=[{"role": "user", "content": prompt}],
-            max_tokens=max_tokens,
+            max_completion_tokens=max_tokens,
             temperature=temperature
         )
         
@@ -331,146 +368,248 @@ class UnifiedLLMService:
         except:
             return {}
 
-class LLMEmailAnalyzer:
-    """Advanced email analyzer using LLM"""
+class SOTAEmailAnalyzer:
+    """State-of-the-Art email analyzer with structured outputs and advanced intelligence"""
     
     def __init__(self, llm_service: UnifiedLLMService):
         self.llm = llm_service
     
-    def analyze_email(self, email: OutlookEmailData, user_context: str = "", email_thread_context: str = "") -> LLMAnalysisResult:
-        """Analyze email using LLM for sophisticated understanding"""
+    def analyze_email(self, email: OutlookEmailData, user_context: str = "", email_thread_context: str = "") -> AdvancedAnalysisResult:
+        """SOTA email analysis with structured outputs and comprehensive intelligence"""
         
+        # Optimize prompt for gpt-4o-mini with clear structure and specific instructions
         analysis_prompt = f"""
-You're a smart assistant helping someone manage their email. Look at this email and think about it like a human would.
+# EMAIL ANALYSIS EXPERT SYSTEM
 
-EMAIL TO ANALYZE:
-From: {email.sender} <{email.sender_email}>
-Subject: {email.subject}
-Date: {email.date}
-Importance: {email.importance}
-Read Status: {'Read' if email.is_read else 'Unread'}
+You are an expert email analyst. Analyze this email systematically and provide structured insights.
 
-Content:
-{email.body[:1000]}
+## CORE CAPABILITIES
+- Business impact assessment
+- Urgency vs importance distinction  
+- Task extraction with specificity
+- Relationship and context analysis
+- Edge case detection (false urgency, delegation issues, etc.)
 
-Preview: {email.body_preview}
+## EMAIL DATA
 
-USER CONTEXT:
-{user_context or "Professional manager at a technology company"}
+**FROM:** {email.sender} <{email.sender_email}>
+**SUBJECT:** {email.subject}
+**DATE:** {email.date}
+**IMPORTANCE:** {email.importance}
+**STATUS:** {'Read' if email.is_read else 'Unread'}
+**ATTACHMENTS:** {'Yes' if email.has_attachments else 'None'}
 
-EMAIL THREAD CONTEXT:
-{email_thread_context or "This appears to be a standalone email or start of new thread"}
+**CONTENT:**
+{email.body[:1800] if email.body else email.body_preview}
 
-THINK LIKE A HUMAN:
+**USER CONTEXT:** {user_context or "Professional at technology company"}
+**THREAD CONTEXT:** {email_thread_context or "Standalone email"}
+**CURRENT DATE:** {datetime.now().strftime('%Y-%m-%d %H:%M')} (Use this to check if deadlines have passed)
 
-Look at this email and ask yourself:
+## ANALYSIS FRAMEWORK
 
-🤔 WHAT'S REALLY GOING ON HERE?
-- Is someone just letting me know something happened? (like "John accepted your meeting")
-- Is someone asking me to do something?
-- Is there a deadline I need to worry about?
-- Is this just spam or marketing stuff?
-- Does this actually need my attention right now?
+### HIGH-PRIORITY INDICATORS
+- Executive/C-level communications → Priority 90+
+- Legal/compliance matters → High risk assessment
+- Client issues → Revenue/relationship impact
+- Crisis situations → Immediate attention
+- Specific deadlines with consequences
 
-💭 PUT YOURSELF IN THEIR SHOES:
-- If I don't respond to this, will someone be waiting?
-- Will something bad happen if I ignore this?
-- Is this urgent (needs action today/tomorrow) or can it wait?
-- Is this person important to my work?
+### EDGE CASES TO DETECT
+- **False Urgency**: Sender marks everything urgent (check if THIS email actually is)
+- **Wrong Recipient**: Should this go to someone else with better expertise?
+- **Passed Deadlines**: Email mentions deadline that already passed
+- **Meeting Spam**: Unnecessary meetings disguised as important
+- **Automated Emails**: System/bot emails pretending to be personal
+- **Cultural Indirectness**: Polite requests that are actually urgent
+- **Generic Event Announcements**: Research talks, seminars, workshops (usually low priority unless personally relevant)
 
-🎯 WHAT DOES "URGENT" ACTUALLY MEAN?
-- Urgent = This really can't wait, someone needs this soon
-- Not urgent = This is important but can be handled in a few days
-- Low priority = This is just FYI or not very important
+### BUSINESS IMPACT FACTORS
+- Revenue/financial impact
+- Legal/compliance risk
+- Reputation damage potential
+- Operational disruption
+- Stakeholder relationship effects
 
-Trust your human instincts about what matters and what doesn't.
+## ANALYSIS INSTRUCTIONS
 
-TELL ME WHAT YOU THINK:
-1. Priority Score (0-100): How important is this really?
-2. Urgency Level: Is this "critical" (drop everything), "urgent" (needs action soon), "normal" (can wait a bit), or "low" (not that important)?
-3. Email Type: What kind of email is this? (meeting stuff, question, request, deadline, just info, etc.)
-4. Action Required: What needs to happen? (reply, attend meeting, approve something, review, do a task, or nothing)
-5. Key Points: What's this email actually about? (in simple terms)
-6. Response Tone: How should someone respond? (formal, professional, friendly, casual)
-7. Deadline Info: Is there a deadline? When exactly?
-8. Sender Relationship: Who is this person to the recipient? (boss, client, coworker, vendor, stranger)
-9. Business Context: Why does this matter for work?
-10. Confidence: How sure are you about this analysis? (0-1, where 1 = very confident)
-11. Task Breakdown: If there are things to do, what are they specifically?
+Analyze like an expert executive assistant who understands business priorities.
 
-💡 SOME COMMON SENSE HINTS:
-- If there's a tight deadline, it's probably urgent
-- If it's from your boss or an important client, pay attention
-- If someone's asking you a question, they're probably waiting for an answer
-- If it's just "John accepted your meeting invite" - that's just FYI, not urgent
-- If it's marketing or automated stuff, probably not important
-- If someone needs something done today or tomorrow, that's urgent
+### PRIORITY SCORING (0-100)
+Score based on these factors:
+- **Sender Authority**: CEO/C-level (90-100), Director (75-90), Manager (60-75), Peer (40-65), Other (20-50)
+- **Business Impact**: Revenue critical (+25), Compliance (+30), Client issue (+20), Reputation (+15)
+- **Time Sensitivity**: Today/tomorrow (+20), This week (+10), Artificial urgency (-15)
+- **Consequences**: What happens if ignored? High consequences = higher score
 
-But use your brain - every email is different!
+### TASK EXTRACTION RULES
+**SPECIFIC TASKS ONLY - NO GENERIC ONES**
 
-🏷️ WHAT KIND OF EMAIL IS THIS?
-Just pick what makes sense:
-- MEETING: Meeting invites, acceptances, cancellations, etc.
-- QUESTION: Someone asking you something
-- REQUEST: Someone wants you to do something  
-- DEADLINE: Something with a due date
-- INFORMATION: Just sharing info, updates, announcements
-- AUTOMATED: Computer-generated stuff, notifications
-- MARKETING: Ads, newsletters, promotional stuff
-- SOCIAL: Personal stuff, congratulations, casual chat
+❌ Bad: "Review email", "Follow up", "Take action"
+✅ Good: "Reply to John's budget question with Q3 numbers by Thursday 2pm"
+✅ Good: "Complete IT security survey at portal.company.com by March 15"
 
-💬 SHOULD SOMEONE REPLY TO THIS?
-Think about it:
-- If someone asked a question → probably yes
-- If it's a meeting invite → probably yes  
-- If it's just "John accepted your meeting" → no, just FYI
-- If it's spam or marketing → definitely no
-- If it's automated system stuff → usually no
+Format: [ACTION] + [SPECIFIC THING] + [HOW/WHERE] + [DEADLINE]
 
-Use your common sense!
+### RESPONSE DECISION LOGIC
+Reply needed if:
+- Direct question asked
+- Your approval/decision required
+- You're specifically mentioned
+- Consequences if no response
+
+No reply needed if:
+- Just FYI/informational
+- Meeting acceptance notifications
+- Someone else should handle
+- Automated/marketing emails
+
+### INTENT TYPES
+- **action_request**: Specific task needed
+- **information_request**: Data/knowledge needed
+- **decision_request**: Your approval needed
+- **meeting_coordination**: Scheduling/logistics
+- **problem_escalation**: Issue needs attention
+- **status_update**: Information sharing
+- **compliance_requirement**: Legal/policy matter
 
 TASK BREAKDOWN REQUIREMENTS:
-For each task, extract and include specific actionable details:
-- LINKS: Include portal URLs, document links, meeting links, survey links
-- DATES/TIMES: Extract specific dates, times, deadlines, meeting schedules
-- CALENDAR EVENTS: Include meeting details (date, time, location, participants)
-- CONTACT INFO: Phone numbers, email addresses for follow-up
-- DOCUMENT DETAILS: File names, document types, attachments mentioned
-- LOCATIONS: Physical addresses, room numbers, virtual meeting rooms
 
-ENHANCED TASK BREAKDOWN EXAMPLES:
-- For IT survey emails: ["Complete IT survey at: [survey_link]", "Rate helpdesk service quality (1-5 scale)", "Submit feedback by: [specific_deadline_date]", "Save confirmation receipt for records"]
-- For meeting requests: ["Check calendar availability for: [specific_date] at [specific_time]", "Confirm attendance to: [organizer_email]", "Prepare agenda items for [meeting_topic]", "Set calendar reminder for: [date] [time] in [location/zoom_link]"]
-- For project updates: ["Review attached documents: [file_names]", "Update project status in: [project_portal_link]", "Coordinate with team members: [contact_list]", "Schedule follow-up meeting by: [date]"]
-- For client inquiries: ["Research client requirements for: [specific_topic]", "Prepare detailed response by: [deadline]", "Gather supporting documentation from: [source_locations]", "Schedule call using: [calendar_link] for [proposed_times]"]
-- For portal access: ["Access portal at: [portal_url]", "Login with credentials: [username_format]", "Complete required sections by: [deadline]", "Download forms from: [download_link]"]
-- For deadline submissions: ["Prepare submission materials for: [topic]", "Submit via: [submission_portal/email]", "Deadline: [exact_date_time]", "Required format: [specifications]"]
+🎯 CREATE ACTIONABLE, SPECIFIC TASKS (NOT GENERIC!):
+
+BAD Examples (too generic):
+❌ "Review email content"
+❌ "Prepare response"
+❌ "Take action as needed"
+❌ "Follow up"
+
+GOOD Examples (specific and actionable):
+✅ "Reply to Sarah's budget question with Q4 numbers by Friday 3pm"
+✅ "Access the IT portal at portal.company.com and complete security training"
+✅ "Join video call tomorrow 2pm using Teams link: [actual_link]"
+✅ "Review the attached project proposal (ProposalV2.pdf) and provide feedback"
+
+📋 TASK BREAKDOWN FORMULA:
+[VERB] + [WHAT EXACTLY] + [WHERE/HOW if applicable] + [BY WHEN if deadline]
+
+Examples by email type:
+
+📊 SURVEY/FORM EMAILS:
+- "Complete [survey_name] at: [actual_URL]"
+- "Rate [specific_service] on 1-5 scale in section 3"
+- "Submit feedback by [exact_date] at [time]"
+- "Download completion certificate from portal"
+
+📅 MEETING REQUESTS:
+- "Check calendar for availability on [specific_date] from [start_time] to [end_time]"
+- "Reply to [organizer_name] at [email] to confirm attendance"
+- "Join meeting via [platform]: [meeting_link]"
+- "Prepare [specific_topic] talking points for discussion"
+
+📋 PROJECT/WORK REQUESTS:
+- "Review attached [file_name] document"
+- "Update project status in [system_name] by [deadline]"
+- "Email [specific_person] at [email] with [specific_info]"
+- "Schedule follow-up call with [person] for [topic]"
+
+❓ QUESTIONS/INFORMATION REQUESTS:
+- "Research [specific_topic] for [requester_name]"
+- "Provide [specific_data/info] to [person] by [deadline]"
+- "Check [system/resource] for [specific_information]"
+- "Compile data on [topic] and send to [email]"
+
+🔗 ACCESS/PORTAL TASKS:
+- "Login to [portal_name] at [URL] using [credential_type]"
+- "Complete [specific_sections] in the online form"
+- "Download [document_type] from [location]"
+- "Upload [file_type] to [destination] by [deadline]"
 
 HERE ARE SOME EXAMPLES:
 - "John has accepted your meeting invitation" → Low priority (25), just info, no action needed, don't reply
 - "Meeting invitation: Project Review" → High priority (75), meeting invite, need to respond
 - Email from "noreply@system.com" → Very low priority (15), automated, ignore it
 - "Can you send me the report by Friday?" → High priority (80), urgent request, needs reply
+- "Research talk by Prof. X on Monday" → Low priority (35), informational, no action needed
+- "You're invited to our workshop" → Low priority (30), generic invite, organizer handles logistics
+- "Seminar announcement: Topic X" → Very low priority (20), announcement only, no personal action
 
-Respond in this EXACT JSON format:
+## OUTPUT FORMAT
+
+Return ONLY valid JSON with this structure (no additional text):
+
+```json
 {{
-    "priority_score": 75.5,
-    "urgency_level": "normal", 
-    "email_type": "request",
-    "action_required": "reply",
-    "should_reply": true,
-    "key_points": ["Point 1", "Point 2", "Point 3"],
-    "suggested_response_tone": "professional",
-    "deadline_info": "By Friday 5 PM" or null,
-    "sender_relationship": "colleague",
-    "business_context": "Project coordination requiring immediate attention",
-    "confidence": 0.85,
-    "task_breakdown": ["Specific task 1", "Specific task 2", "Specific task 3"]
+  "priority_score": 75.0,
+  "urgency_level": "urgent",
+  "confidence": 0.85,
+  "primary_intent": "action_request",
+  "secondary_intents": ["information_request"],
+  "sender_relationship": "manager",
+  "relationship_strength": 0.7,
+  "sentiment_analysis": {{
+    "neutral": 0.6,
+    "urgent": 0.3,
+    "positive": 0.1
+  }},
+  "communication_style": "direct",
+  "business_impact": "medium",
+  "impact_factors": ["operational", "deadlines"],
+  "risk_assessment": {{
+    "operational": 0.6,
+    "reputation": 0.4
+  }},
+  "edge_case_flags": [],
+  "outcome_objectives": [
+    "Complete specific task mentioned in email"
+  ],
+  "action_items": [
+    {{
+      "action": "Specific action with details from email content",
+      "deadline": "2024-MM-DDTHH:MM:SS",
+      "priority": "high",
+      "resources_needed": ["List specific resources"],
+      "dependencies": ["List dependencies"],
+      "outcome": "Expected result"
+    }}
+  ],
+  "dependencies": ["List what's needed first"],
+  "delegation_suggestions": ["Who else should be involved"],
+  "email_context": "new",
+  "missing_context": ["What info seems missing"],
+  "assumptions_made": ["What sender assumes you know"],
+  "cultural_considerations": [],
+  "should_reply": true,
+  "response_urgency": "same_day",
+  "response_complexity": "detailed_response",
+  "suggested_response_tone": "professional",
+  "email_type": "request",
+  "action_required": "reply",
+  "key_points": [
+    "Main point 1 from email",
+    "Main point 2 from email",
+    "Main point 3 from email"
+  ],
+  "deadline_info": "Specific deadline from email or null",
+  "business_context": "Why this matters for business",
+  "task_breakdown": [
+    "Specific task 1 with details",
+    "Specific task 2 with details",
+    "Specific task 3 with details"
+  ]
 }}
+```
+
+**CRITICAL RULES:**
+1. Extract actual details from the email content
+2. Use specific dates/times found in email for deadlines
+3. Make tasks specific to the email content, not generic
+4. Check if mentioned deadlines have already passed
+5. Return ONLY the JSON, no explanations or additional text
 """
 
         try:
-            response = self.llm.generate_response(analysis_prompt, max_tokens=500, temperature=0.3)
+            # Optimized for gpt-4o-mini: balanced temperature for creativity + consistency
+            response = self.llm.generate_response(analysis_prompt, max_tokens=2500, temperature=0.2)
             
             # Extract JSON from response
             json_start = response.find('{')
@@ -480,34 +619,69 @@ Respond in this EXACT JSON format:
                 json_str = response[json_start:json_end]
                 analysis_data = json.loads(json_str)
                 
-                return LLMAnalysisResult(
+                return AdvancedAnalysisResult(
+                    # Core Analysis
                     priority_score=float(analysis_data.get('priority_score', 50)),
                     urgency_level=analysis_data.get('urgency_level', 'normal'),
+                    confidence=float(analysis_data.get('confidence', 0.5)),
+                    
+                    # Advanced Intent Classification
+                    primary_intent=analysis_data.get('primary_intent', 'information_sharing'),
+                    secondary_intents=analysis_data.get('secondary_intents', []),
+                    intent_confidence=analysis_data.get('intent_confidence', {}),
+                    
+                    # Relationship & Sentiment Intelligence
+                    sender_relationship=analysis_data.get('sender_relationship', 'colleague'),
+                    relationship_strength=float(analysis_data.get('relationship_strength', 0.5)),
+                    sentiment_analysis=analysis_data.get('sentiment_analysis', {'neutral': 1.0}),
+                    communication_style=analysis_data.get('communication_style', 'formal'),
+                    
+                    # Business Impact Assessment
+                    business_impact=analysis_data.get('business_impact', 'medium'),
+                    impact_factors=analysis_data.get('impact_factors', []),
+                    risk_assessment=analysis_data.get('risk_assessment', {}),
+                    
+                    # Smart Task Generation
+                    outcome_objectives=analysis_data.get('outcome_objectives', []),
+                    action_items=analysis_data.get('action_items', []),
+                    dependencies=analysis_data.get('dependencies', []),
+                    delegation_suggestions=analysis_data.get('delegation_suggestions', []),
+                    
+                    # Context Understanding
+                    email_context=analysis_data.get('email_context', 'standalone'),
+                    missing_context=analysis_data.get('missing_context', []),
+                    assumptions_made=analysis_data.get('assumptions_made', []),
+                    cultural_considerations=analysis_data.get('cultural_considerations', []),
+                    
+                    # Smart Response Intelligence
+                    should_reply=bool(analysis_data.get('should_reply', True)),
+                    response_urgency=analysis_data.get('response_urgency', 'when_convenient'),
+                    response_complexity=analysis_data.get('response_complexity', 'simple_ack'),
+                    suggested_response_tone=analysis_data.get('suggested_response_tone', 'professional'),
+                    
+                    # Legacy compatibility
                     email_type=analysis_data.get('email_type', 'normal'),
                     action_required=analysis_data.get('action_required', 'none'),
-                    should_reply=bool(analysis_data.get('should_reply', True)),
                     key_points=analysis_data.get('key_points', []),
-                    suggested_response_tone=analysis_data.get('suggested_response_tone', 'professional'),
                     deadline_info=analysis_data.get('deadline_info'),
-                    sender_relationship=analysis_data.get('sender_relationship', 'colleague'),
                     business_context=analysis_data.get('business_context', ''),
-                    confidence=float(analysis_data.get('confidence', 0.5)),
                     task_breakdown=analysis_data.get('task_breakdown', [])
                 )
             else:
-                print(f"❌ Could not parse JSON from LLM response: {response}")
-                return self._fallback_analysis(email)
+                print(f"❌ Could not extract JSON from SOTA response")
+                print(f"Response preview: {response[:300]}...")
+                return self._basic_fallback(email)
                 
         except json.JSONDecodeError as e:
             print(f"❌ JSON decode error: {e}")
-            print(f"LLM Response: {response}")
-            return self._fallback_analysis(email)
+            print(f"Response preview: {response[:300]}...")
+            return self._basic_fallback(email)
         except Exception as e:
-            print(f"❌ LLM analysis error: {e}")
-            return self._fallback_analysis(email)
+            print(f"❌ SOTA analysis error: {e}")
+            return self._basic_fallback(email)
     
-    def _fallback_analysis(self, email: OutlookEmailData) -> LLMAnalysisResult:
-        """Enhanced fallback analysis with professional prioritization"""
+    def _basic_fallback(self, email: OutlookEmailData) -> AdvancedAnalysisResult:
+        """Basic fallback when SOTA analysis fails - minimal but functional"""
         
         text = (email.subject + " " + email.body).lower()
         
@@ -733,19 +907,55 @@ Respond in this EXACT JSON format:
             if 'action' in text or 'required' in text:
                 task_breakdown.append("⚡ Determine if action is needed")
 
-        return LLMAnalysisResult(
-            priority_score=priority_score,
-            urgency_level=urgency_level,
-            email_type='request' if '?' in text or 'please' in text else 'information',
-            action_required='reply' if priority_score > 60 and should_reply else 'review',
-            should_reply=should_reply,
-            key_points=['Professional email requiring attention'],
+        # Fallback to basic analysis if LLM fails
+        print(f"❌ SOTA analysis failed: {e}")
+        return AdvancedAnalysisResult(
+            # Core Analysis - basic defaults
+            priority_score=50.0,
+            urgency_level='normal',
+            confidence=0.3,  # Low confidence for fallback
+            
+            # Advanced Intent Classification - basic defaults
+            primary_intent='information_sharing',
+            secondary_intents=[],
+            intent_confidence={'information_sharing': 0.5},
+            
+            # Relationship & Sentiment Intelligence - basic defaults
+            sender_relationship='colleague',
+            relationship_strength=0.5,
+            sentiment_analysis={'neutral': 1.0},
+            communication_style='formal',
+            
+            # Business Impact Assessment - basic defaults
+            business_impact='medium',
+            impact_factors=[],
+            risk_assessment={},
+            
+            # Smart Task Generation - basic defaults
+            outcome_objectives=[f'Address email from {email.sender}'],
+            action_items=[],
+            dependencies=[],
+            delegation_suggestions=[],
+            
+            # Context Understanding - basic defaults
+            email_context='standalone',
+            missing_context=[],
+            assumptions_made=[],
+            cultural_considerations=[],
+            
+            # Smart Response Intelligence - basic defaults
+            should_reply=True,
+            response_urgency='when_convenient',
+            response_complexity='simple_ack',
             suggested_response_tone='professional',
-            deadline_info=deadline_info,
-            sender_relationship='professional',
-            business_context='Business communication requiring timely response',
-            confidence=0.6,
-            task_breakdown=task_breakdown
+            
+            # Legacy compatibility
+            email_type='normal',
+            action_required='review',
+            key_points=[f'Email from {email.sender}'],
+            deadline_info=None,
+            business_context='Standard business communication',
+            task_breakdown=[f'Review email from {email.sender}']
         )
 
 class EmailTemplateManager:
@@ -1270,23 +1480,57 @@ class LLMResponseDrafter:
         
         from datetime import datetime
         
+        # Check if user is CC'ed vs direct recipient
+        is_cc_recipient = self._is_user_cc_recipient(email, user_email)
+        direct_recipients = self._get_direct_recipients(email)
+        
         draft_prompt = f"""
-CONTEXT: {user_name} received an email and needs to write a response.
+🏆 MASTER EMAIL RESPONSE ARCHITECT
 
-EMAIL THAT {user_name} RECEIVED:
+You are an elite AI that crafts perfect email responses. You understand:
+- Business communication psychology
+- Relationship dynamics and power structures  
+- Cultural communication nuances
+- Strategic messaging and positioning
+- Risk mitigation through careful wording
+- Outcome optimization through intelligent responses
+
+You're helping {user_name} ({user_email}) create the perfect response strategy for this email.
+
+EMAIL DETAILS:
 From: {email.sender} <{email.sender_email}>
-To: {user_name}
+To: {', '.join(direct_recipients) if direct_recipients else 'Multiple recipients'}
+CC: {'Yes (you are CC\'ed)' if is_cc_recipient else 'No'}
 Subject: {email.subject}
 Content: {email.body[:800]}
 
-YOUR TASK: Write {user_name}'s reply email TO {email.sender}.
-IMPORTANT: You are writing AS {user_name}, responding TO {email.sender}.
+IMPORTANT CONTEXT ABOUT {user_name}:
+- Your role/position: {self._get_user_context(user_email)}
+- Your expertise areas: {self._get_user_expertise(user_email)}
+- Are you CC'ed?: {'YES - you are CC\'ed, not the main recipient' if is_cc_recipient else 'NO - you are a direct recipient'}
+- Email analysis: {analysis.email_type}, Action needed: {analysis.action_required}
+- Key points from email: {', '.join(analysis.key_points)}
+- Sender relationship to you: {analysis.sender_relationship}
+- Business context: {analysis.business_context}
 
-ANALYSIS CONTEXT:
-- Email Type: {analysis.email_type}
-- Action Required: {analysis.action_required}
-- Key Points: {', '.join(analysis.key_points)}
-- Suggested Tone: {analysis.suggested_response_tone}
+SMART RESPONSE LOGIC:
+🚫 DON'T REPLY IF:
+- You're only CC'ed (unless specifically asked to respond)
+- It's just a meeting acceptance/decline notification
+- It's automated/marketing content
+- Someone else is clearly handling it
+- It's just FYI information
+
+✅ DO REPLY IF:
+- You're directly addressed with a question or request
+- You're the right person to provide the information
+- You need to confirm attendance/availability
+- It's your responsibility or area of expertise
+
+CURRENT SITUATION ANALYSIS:
+{'You are CC\'ed on this email. Unless you are specifically mentioned by name or this directly relates to your expertise/responsibilities, you should not respond.' if is_cc_recipient else f'You are a direct recipient. As {self._get_user_context(user_email)}, consider if this request/question is something you should personally handle.'}
+
+If you determine a response IS needed, write a helpful, specific reply addressing the actual content.
 - Deadline: {analysis.deadline_info or 'None mentioned'}
 - Sender Relationship: {analysis.sender_relationship}
 - Business Context: {analysis.business_context}
@@ -1296,18 +1540,30 @@ ANALYSIS CONTEXT:
 
 CURRENT DATE: {datetime.now().strftime('%B %d, %Y (%A)')}
 
-RESPONSE REQUIREMENTS FOR {user_name}:
-1. Address the sender by first name (extract from sender name)
-2. Acknowledge the specific content/request in the original email
-3. Provide a helpful, appropriate response from {user_name}'s perspective
-4. Match the suggested tone and relationship level
-5. Include specific actions or next steps if needed
-6. Use natural, human-like language
-7. Keep professional but personalized
-8. Address any deadlines or urgency
-9. CRITICAL: Do NOT include ANY closing like "Best regards", "Sincerely", etc.
-10. Do NOT include ANY signature, contact details, or organizational information
-11. End the response with the actual email content only
+📝 INTELLIGENT RESPONSE REQUIREMENTS FOR {user_name}:
+
+🧠 SHOW EMAIL UNDERSTANDING:
+1. Reference specific details from their email (proves you read carefully)
+2. Address their underlying need, not just surface request
+3. Consider what they already know vs. what they need
+4. Anticipate logical follow-up questions
+
+💬 COMMUNICATION STYLE:
+5. Use sender's first name naturally
+6. Match appropriate formality level for relationship
+7. Be concise but complete - no fluff
+8. Sound like a helpful human, not a chatbot
+
+⚡ ACTIONABLE CONTENT:
+9. Provide concrete next steps if applicable
+10. Include specific timelines, links, or contact info when relevant
+11. Address any urgency or deadlines mentioned
+12. Offer additional help if appropriate
+
+🎯 TECHNICAL FORMAT:
+13. NO closings like "Best regards", "Sincerely" (Outlook adds these)
+14. NO signatures or contact details
+15. End with actual helpful content only
 
 DEADLINE HANDLING:
 - CRITICAL: Always check if any mentioned deadline has already passed
@@ -1315,27 +1571,55 @@ DEADLINE HANDLING:
 - NEVER promise to complete something by a date that has already passed
 - If today is September 1st and email mentions "by July 15th", acknowledge the delay and commit to urgent completion
 
-SPECIAL HANDLING:
-- For IT Helpdesk forms: Check if this is a service request form. If so, acknowledge receipt and provide timeline for action.
-- For marketing emails: Politely acknowledge if interested, or briefly decline if not relevant.
-- For meeting requests: Accept/decline with calendar consideration.
-- For questions: Provide helpful answers or timeline for detailed response.
+RESPONSE DECISION:
+As {user_name} ({self._get_user_context(user_email)}), should you respond to this email?
 
-You MUST respond with ONLY valid JSON. Generate the email content that will go after "Hi [SenderName]," 
+Consider:
+- Is this within your area of responsibility/expertise?
+- Are you the right person to provide this information/take this action?
+- Does the sender need a response specifically from you?
+- Is someone else better positioned to handle this?
 
-SENDER INFO: The email is from {email.sender} <{email.sender_email}>
-EXTRACT FIRST NAME: {email.sender.split()[0] if email.sender else 'there'}
+If NO RESPONSE needed, return:
+{{
+    "should_respond": false,
+    "reasoning": "Specific explanation why {user_name} shouldn't respond (e.g., not your area, someone else handling, FYI only, etc.)",
+    "subject": "",
+    "body": "",
+    "tone": "",
+    "confidence": 0.9
+}}
 
-EXAMPLE: If the sender name is "John Smith", your response should start with "Hi John,"
+If RESPONSE needed, provide a specific, helpful reply that:
+1. Directly addresses what the sender asked/needs
+2. Provides concrete next steps or information
+3. Shows understanding of the context
+4. Is appropriate for {user_name}'s role and expertise
+
+📧 EMAIL ANALYSIS FOR SMART RESPONSE:
+
+Sender: {email.sender} <{email.sender_email}>
+First name: {email.sender.split()[0] if email.sender else 'there'}
+
+🔍 BEFORE RESPONDING, UNDERSTAND:
+- What is their specific request/question?
+- What context or background info do they expect me to know?
+- How urgent is this for them?
+- What would be the most helpful response?
+
+💡 EXAMPLE: If sender is "John Smith" asking about budget, start with "Hi John," then address the budget question specifically with actual useful info.
+
+📋 You MUST respond with ONLY valid JSON:
 
 {{
+    "should_respond": true,
     "subject": "Re: [original subject]", 
     "body": "Hi {email.sender.split()[0] if email.sender else 'there'},\
 \
-Thank you for the reminder about the July 15th deadline. I apologize for the delay - I will update the task progress on Notion as soon as possible and prioritize this urgently.",
+[Your specific, helpful response addressing their actual request/question]",
     "tone": "professional",
     "confidence": 0.9,
-    "reasoning": "Acknowledging passed deadline with appropriate urgency and commitment",
+    "reasoning": "Explain why this response is appropriate and helpful",
     "alternative_versions": []
 }}
 
@@ -1374,7 +1658,20 @@ CRITICAL REQUIREMENTS:
                     print("❌ JSON structure validation failed")
                     return self._fallback_draft(email, analysis, user_name, user_email)
                 
-                # Calculate response quality score
+                # Check if LLM decided not to respond
+                should_respond = draft_data.get('should_respond', True)
+                if not should_respond:
+                    # Return a "no response needed" result
+                    return LLMDraftResult(
+                        subject="",
+                        body="[No response needed: " + draft_data.get('reasoning', 'LLM determined response not necessary') + "]",
+                        tone="none",
+                        confidence=float(draft_data.get('confidence', 0.9)),
+                        reasoning=draft_data.get('reasoning', ''),
+                        alternative_versions=[]
+                    )
+                
+                # Calculate response quality score for actual responses
                 response_body = draft_data.get('body', '')
                 quality_score = self._calculate_response_quality(response_body, email, analysis)
                 
@@ -1435,6 +1732,31 @@ CRITICAL REQUIREMENTS:
             quality_score -= 0.3
         
         return max(0.3, min(1.0, quality_score))
+    
+    def _is_user_cc_recipient(self, email: OutlookEmailData, user_email: str) -> bool:
+        """Check if user is CC'ed rather than direct recipient"""
+        try:
+            # Check if user is in CC field (this requires the email to have CC info)
+            # For now, we'll use a simple heuristic - if user is not in TO field but received email, likely CC'ed
+            if hasattr(email, 'to_recipients') and email.to_recipients:
+                to_emails = [recipient.get('emailAddress', {}).get('address', '').lower() for recipient in email.to_recipients]
+                return user_email.lower() not in to_emails
+            
+            # Fallback: analyze the email body for CC indicators
+            body_lower = email.body.lower()
+            cc_indicators = ['cc:', 'copied:', 'fyi', 'for your information', 'keeping you in the loop']
+            return any(indicator in body_lower for indicator in cc_indicators)
+        except:
+            return False
+    
+    def _get_direct_recipients(self, email: OutlookEmailData) -> list:
+        """Get list of direct recipients (TO field)"""
+        try:
+            if hasattr(email, 'to_recipients') and email.to_recipients:
+                return [recipient.get('emailAddress', {}).get('address', '') for recipient in email.to_recipients]
+            return []
+        except:
+            return []
     
     def _extract_json_robust(self, response: str) -> str:
         """Advanced JSON extraction with multiple strategies (research-based)"""
@@ -1670,7 +1992,7 @@ class LLMEnhancedEmailSystem:
     def __init__(self, model_type: str = None, model: str = None, host: str = None):
         # Initialize services
         self.llm = UnifiedLLMService(model_type=model_type, model=model, host=host)
-        self.analyzer = LLMEmailAnalyzer(self.llm)
+        self.analyzer = SOTAEmailAnalyzer(self.llm)
         self.drafter = LLMResponseDrafter(self.llm)
         
         # Initialize new feature managers
@@ -2640,11 +2962,29 @@ Keep it under 200 words and focus on actionable style elements.
             print("=" * 60)
             
             for i, (email, analysis) in enumerate(actionable_emails[:5]):
-                print(f"\n✨ Generating LLM draft {i+1}: {email.subject[:40]}...")
+                print(f"\n✨ Analyzing draft need {i+1}: {email.subject[:40]}...")
+                
+                # Check if user is CC'ed - skip draft creation if only CC'ed
+                is_cc_recipient = self._is_user_cc_recipient(email, current_user_email)
+                
+                if is_cc_recipient:
+                    print(f"   ℹ️ You are CC'ed on this email - no reply draft needed")
+                    print(f"   📝 CC Status: Not the primary recipient, likely for information only")
+                    # Still save analysis but skip draft creation
+                    self._save_email_analysis(email, analysis, None)
+                    continue
+                
+                print(f"   ✅ Direct recipient - generating draft response...")
                 
                 # Generate enhanced contextual draft (inspired by inbox-zero)
                 draft = self.generate_contextual_draft(email, analysis)
                 # Note: LLM calls are tracked within generate_contextual_draft
+                
+                # Check if LLM determined no response is needed
+                if hasattr(draft, 'should_respond') and not draft.should_respond:
+                    print(f"   🤖 LLM determined no response needed: {draft.reasoning}")
+                    self._save_email_analysis(email, analysis, draft)
+                    continue
                 
                 # Update session state with draft information
                 self._save_email_analysis(email, analysis, draft)
@@ -3271,7 +3611,7 @@ Keep it under 200 words and focus on actionable style elements.
                 
                 # Minimal context for speed
                 thread_context = ""
-                user_context = f"User: {current_user_name}, Email: {current_user_email}, Role: Professional at MBZUAI"
+                user_context = f"User: {current_user_name}, Email: {current_user_email}, Role: {self._get_user_context(current_user_email)}"
                 
                 # Core LLM Analysis only
                 analysis = self.analyzer.analyze_email(email, user_context, thread_context)
@@ -3431,7 +3771,7 @@ Keep it under 200 words and focus on actionable style elements.
                 
                 # Enhanced context with thread analysis
                 thread_context = self._analyze_email_thread(email)
-                user_context = f"User: {current_user_name}, Email: {current_user_email}, Role: Professional at MBZUAI"
+                user_context = f"User: {current_user_name}, Email: {current_user_email}, Role: {self._get_user_context(current_user_email)}"
                 
                 # Step 4a: Core LLM Analysis
                 analysis = self.analyzer.analyze_email(email, user_context, thread_context)
@@ -3772,6 +4112,9 @@ SMART DECISION LOGIC:
 - Email already contains meeting links/IDs (organizer handles invites)
 - You're being invited to something already organized
 - It's an announcement about an existing event
+- Sender is an organization, department, or automated system
+- Email contains phrases like "you are invited", "join us", "event announcement"
+- Academic talks, seminars, conferences (organizers handle invites)
 
 ✅ DO create events ONLY when:
 - You're asked to schedule a meeting and send invites
@@ -3822,6 +4165,9 @@ EXAMPLES:
 - "Research talk Monday 11 AM-12 PM" → false (professor/department organized)
 - "Join our team meeting: Teams ID 123..." → false (already has meeting link)
 - "You're invited to..." → false (already organized)
+- Generic event announcements from organizations → false (they handle invites)
+- University/academic talks, seminars, workshops → false (department organized)
+- Invitations from automated systems → false (already scheduled)
 
 ✅ CREATE (you need to organize):
 - "Can we meet Monday 2-4 PM to discuss?" → true (you schedule & invite)
